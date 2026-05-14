@@ -2,10 +2,37 @@ const STORAGE_KEY = "kmitl_schedule_builder_selected_subjects";
 const EXTENSION_FLAG = "data-kmitl-schedule-builder-processed";
 const EXTENSION_PROCESSED_VALUE = "true";
 const CHECKBOX_WRAPPER_SELECTOR = ".ksb-checkbox-wrapper";
-const SUBJECT_CARD_CANDIDATE_SELECTOR = "tbody tr, div, li, article, section";
+const SUBJECT_CARD_CANDIDATE_SELECTOR = "div, li, article, section";
 const SUBJECT_ID_PATTERN = /\b\d{8}\b/;
-const TIME_RANGE_PATTERN = /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/;
+const TIME_RANGE_PATTERN = /(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/;
 const SECTION_PATTERN = /section\s*\(([^)]+)\)/i;
+const DEBUG_PARSING = false;
+const SUBJECT_TABLE_COLUMNS = {
+    subjectCode: 0,
+    subjectName: 1,
+    credits: 2,
+    group: 3,
+    classTime: 4,
+    room: 5,
+    building: 6,
+    teacher: 7,
+    examInfo: 8,
+    condition: 9,
+    note: 10,
+    capacity: 11,
+    enrolled: 12,
+    queue: 13,
+    registered: 14,
+};
+const THAI_DAY_MAP = {
+    "จันทร์": "Mon",
+    "อังคาร": "Tue",
+    "พุธ": "Wed",
+    "พฤหัสบดี": "Thu",
+    "ศุกร์": "Fri",
+    "เสาร์": "Sat",
+    "อาทิตย์": "Sun",
+};
 let pageScanScheduled = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
@@ -123,20 +150,28 @@ function schedulePageScan() {
 function findSubjectCards() {
     /*
      * Detection is intentionally centralized here. After inspecting the real
-     * KMITL DOM, replace SUBJECT_CARD_CANDIDATE_SELECTOR or add stable
-     * selectors before the fallback heuristics below.
+     * KMITL DOM, update findSubjectRows or SUBJECT_CARD_CANDIDATE_SELECTOR here.
      *
-     * The fallback must stay text-based for now:
+     * The fallback stays text-based:
      * - visible text contains section(...)
      * - visible text contains HH:mm - HH:mm
      */
+    const rows = findSubjectRows();
     const candidates = [...document.querySelectorAll(SUBJECT_CARD_CANDIDATE_SELECTOR)]
         .filter((element) => element instanceof HTMLElement)
         .filter(isLikelySubjectCard);
 
-    return candidates.filter((element) => {
+    const fallbackCards = candidates.filter((element) => {
         return !hasSubjectCardChild(element, candidates);
     });
+
+    return [...rows, ...fallbackCards];
+}
+
+function findSubjectRows() {
+    return [...document.querySelectorAll("tbody tr")]
+        .filter((row) => row instanceof HTMLTableRowElement)
+        .filter(isLikelySubjectRow);
 }
 
 function isLikelySubjectCard(element) {
@@ -151,22 +186,28 @@ function isLikelySubjectCard(element) {
 }
 
 function isLikelyKmitlTableRow(row) {
+    return isLikelySubjectRow(row);
+}
+
+function isLikelySubjectRow(row) {
     if (row.classList.contains("table-space-tr")) return false;
 
     const cells = getDirectTableCells(row);
-    if (cells.length < 4) return false;
+    if (cells.length <= SUBJECT_TABLE_COLUMNS.registered) return false;
 
-    const cellTexts = cells.map((cell) => normalizeText(cell.innerText));
-    const subjectIdIndex = cellTexts.findIndex((text) => SUBJECT_ID_PATTERN.test(text));
-    const timeIndex = cellTexts.findIndex((text) => TIME_RANGE_PATTERN.test(text));
-    const hasSubjectId = subjectIdIndex !== -1;
-    const hasTime = timeIndex !== -1;
-    const hasSectionCell = cells.some((cell) => {
-        const text = normalizeText(cell.innerText);
-        return /^\d+[A-Z]?(?:\s*\([^)]+\))?$/i.test(text);
-    });
+    const subjectCode = getCellText(row, SUBJECT_TABLE_COLUMNS.subjectCode);
+    const subjectName = getCellText(row, SUBJECT_TABLE_COLUMNS.subjectName);
+    const groupCell = getCellText(row, SUBJECT_TABLE_COLUMNS.group);
+    const classTime = getCellText(row, SUBJECT_TABLE_COLUMNS.classTime);
+    const dayAndTime = extractDayAndTime(classTime);
 
-    return hasSubjectId && hasTime && hasSectionCell && subjectIdIndex < timeIndex;
+    return (
+        SUBJECT_ID_PATTERN.test(subjectCode) &&
+        Boolean(subjectName) &&
+        Boolean(extractSectionFromGroupCell(groupCell)) &&
+        Boolean(dayAndTime.startTime) &&
+        Boolean(dayAndTime.endTime)
+    );
 }
 
 function hasSubjectCardChild(element, candidates) {
@@ -198,40 +239,44 @@ function getCheckboxInjectionTarget(element) {
 }
 
 function parseSubjectElement(element) {
-    if (element instanceof HTMLTableRowElement && isLikelyKmitlTableRow(element)) {
-        return parseKmitlTableSubjectRow(element);
+    if (element instanceof HTMLTableRowElement && isLikelySubjectRow(element)) {
+        return parseSubjectRow(element);
     }
 
     return parseSubjectCard(element);
 }
 
-function parseKmitlTableSubjectRow(row) {
-    const cells = getDirectTableCells(row);
-    const cellTexts = cells.map((cell) => normalizeText(cell.innerText));
-    const subjectIdIndex = cellTexts.findIndex((text) => SUBJECT_ID_PATTERN.test(text));
-    const timeIndex = cellTexts.findIndex((text) => TIME_RANGE_PATTERN.test(text));
-    const sectionIndex = cellTexts.findIndex((text, cellIndex) => {
-        return cellIndex > subjectIdIndex && /^\d+[A-Z]?(?:\s*\([^)]+\))?$/i.test(text);
+function parseSubjectRow(row) {
+    const rawText = row.innerText || "";
+    const groupCell = getCellText(row, SUBJECT_TABLE_COLUMNS.group);
+    const dayAndTime = extractDayAndTime(getCellText(row, SUBJECT_TABLE_COLUMNS.classTime));
+
+    if (!dayAndTime.startTime || !dayAndTime.endTime) return null;
+
+    const subject = createParsedSubject({
+        subjectCode: extractSubjectCode(getCellText(row, SUBJECT_TABLE_COLUMNS.subjectCode)),
+        subjectName: getCellText(row, SUBJECT_TABLE_COLUMNS.subjectName),
+        credits: getCellText(row, SUBJECT_TABLE_COLUMNS.credits),
+        section: extractSectionFromGroupCell(groupCell),
+        classType: extractClassTypeFromGroupCell(groupCell),
+        day: dayAndTime.day,
+        dayText: dayAndTime.dayText,
+        startTime: dayAndTime.startTime,
+        endTime: dayAndTime.endTime,
+        room: getCellText(row, SUBJECT_TABLE_COLUMNS.room),
+        building: getCellText(row, SUBJECT_TABLE_COLUMNS.building),
+        teacher: getCellText(row, SUBJECT_TABLE_COLUMNS.teacher),
+        examInfo: extractExamInfo(getCellText(row, SUBJECT_TABLE_COLUMNS.examInfo)),
+        condition: getCellText(row, SUBJECT_TABLE_COLUMNS.condition),
+        note: getCellText(row, SUBJECT_TABLE_COLUMNS.note),
+        capacity: getCellText(row, SUBJECT_TABLE_COLUMNS.capacity),
+        enrolled: getCellText(row, SUBJECT_TABLE_COLUMNS.enrolled),
+        queue: getCellText(row, SUBJECT_TABLE_COLUMNS.queue),
+        registered: getCellText(row, SUBJECT_TABLE_COLUMNS.registered),
+        rawText,
     });
 
-    if (subjectIdIndex === -1 || timeIndex === -1 || sectionIndex === -1) return null;
-
-    const subjectId = cellTexts[subjectIdIndex].match(SUBJECT_ID_PATTERN)[0];
-    const timeMatch = cellTexts[timeIndex].match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-
-    if (!timeMatch) return null;
-
-    const subject = {
-        code: subjectId,
-        name: cellTexts[subjectIdIndex + 1] || extractSubjectName(row.innerText || ""),
-        section: cellTexts[sectionIndex],
-        type: extractSubjectType(row.innerText || ""),
-        day: extractDay(cellTexts[timeIndex]),
-        start: timeMatch[1],
-        end: timeMatch[2],
-        room: extractRoom(row.innerText || ""),
-        rawText: row.innerText || "",
-    };
+    debugLogParsedSubject(subject);
 
     return {
         ...subject,
@@ -240,27 +285,31 @@ function parseKmitlTableSubjectRow(row) {
 }
 
 function parseSubjectCard(card) {
+    /*
+     * This parser is intentionally text-first until the real KMITL DOM is
+     * inspected. If stable per-field selectors exist, replace individual
+     * extract* helpers or pass selector-derived text into createParsedSubject.
+     */
     const text = card.innerText || "";
+    const timeRange = extractTimeRange(text);
 
-    const timeMatch = text.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-    const sectionMatch = text.match(SECTION_PATTERN);
-
-    if (!timeMatch || !sectionMatch) return null;
-
-    const name = extractSubjectName(text);
-    const type = extractSubjectType(text);
-
-    const subject = {
-        code: extractSubjectCode(text),
-        name,
-        section: sectionMatch[1],
-        type,
+    const subject = createParsedSubject({
+        subjectCode: extractSubjectCode(text),
+        subjectName: extractSubjectName(text),
+        section: extractSection(text),
+        classType: extractClassType(text),
         day: extractDay(text),
-        start: timeMatch[1],
-        end: timeMatch[2],
+        dayText: extractDay(text),
+        startTime: timeRange.startTime,
+        endTime: timeRange.endTime,
         room: extractRoom(text),
+        teacher: extractTeacher(text),
         rawText: text,
-    };
+    });
+
+    if (!subject.section || !subject.startTime || !subject.endTime) return null;
+
+    debugLogParsedSubject(subject);
 
     return {
         ...subject,
@@ -268,10 +317,36 @@ function parseSubjectCard(card) {
     };
 }
 
+function createParsedSubject(subject) {
+    return {
+        id: "",
+        subjectCode: normalizeWhitespace(subject.subjectCode),
+        subjectName: normalizeWhitespace(subject.subjectName),
+        credits: normalizeWhitespace(subject.credits),
+        section: normalizeWhitespace(subject.section),
+        classType: subject.classType || "unknown",
+        day: normalizeWhitespace(subject.day),
+        dayText: normalizeWhitespace(subject.dayText),
+        startTime: normalizeWhitespace(subject.startTime),
+        endTime: normalizeWhitespace(subject.endTime),
+        room: normalizeWhitespace(subject.room),
+        building: normalizeWhitespace(subject.building),
+        teacher: normalizeWhitespace(subject.teacher),
+        examInfo: normalizeWhitespace(subject.examInfo),
+        condition: normalizeWhitespace(subject.condition),
+        note: normalizeWhitespace(subject.note),
+        capacity: normalizeWhitespace(subject.capacity),
+        enrolled: normalizeWhitespace(subject.enrolled),
+        queue: normalizeWhitespace(subject.queue),
+        registered: normalizeWhitespace(subject.registered),
+        rawText: subject.rawText || "",
+    };
+}
+
 function extractSubjectName(text) {
     const lines = text
         .split("\n")
-        .map((line) => line.trim())
+        .map(normalizeWhitespace)
         .filter(Boolean);
 
     const subjectLine = lines.find((line) => {
@@ -290,12 +365,67 @@ function extractSubjectCode(text) {
     return subjectIdMatch ? subjectIdMatch[0] : "";
 }
 
-function extractSubjectType(text) {
-    if (text.includes("ปฏิบัติ")) return "ปฏิบัติ";
-    if (text.includes("Practice")) return "Practice";
-    if (text.includes("Lecture")) return "Lecture";
+function extractSection(text) {
+    const explicitSectionMatch = text.match(SECTION_PATTERN);
+    if (explicitSectionMatch) return explicitSectionMatch[1];
 
-    return "ทฤษฎี";
+    const lineSection = text
+        .split("\n")
+        .map(normalizeWhitespace)
+        .find((line) => /^\d+[A-Z]?(?:\s*\([^)]+\))?$/i.test(line));
+
+    return lineSection || "";
+}
+
+function extractSectionFromGroupCell(value) {
+    const sectionMatch = normalizeWhitespace(value).match(/\d+[A-Z]?/i);
+    return sectionMatch ? sectionMatch[0] : "";
+}
+
+function extractClassTypeFromGroupCell(value) {
+    const normalizedText = normalizeWhitespace(value).toLowerCase();
+
+    if (/ทฤษฎี|lecture|theory/.test(normalizedText)) return "theory";
+    if (/ปฏิบัติ|lab|practical/.test(normalizedText)) return "practical";
+    if (/สัมมนา|seminar/.test(normalizedText)) return "seminar";
+
+    return "unknown";
+}
+
+function extractClassType(text) {
+    const normalizedText = normalizeWhitespace(text).toLowerCase();
+
+    if (/ทฤษฎี|lecture|theory/.test(normalizedText)) return "theory";
+    if (/ปฏิบัติ|lab|practical/.test(normalizedText)) return "practical";
+    if (/สัมมนา|seminar/.test(normalizedText)) return "seminar";
+
+    return "unknown";
+}
+
+function extractTimeRange(text) {
+    const timeMatch = text.match(TIME_RANGE_PATTERN);
+
+    return {
+        startTime: timeMatch ? timeMatch[1] : "",
+        endTime: timeMatch ? timeMatch[2] : "",
+    };
+}
+
+function extractDayAndTime(value) {
+    const text = normalizeWhitespace(value);
+    const timeRange = extractTimeRange(text);
+    const dayText = Object.keys(THAI_DAY_MAP).find((thaiDay) => text.includes(thaiDay)) || "";
+
+    return {
+        day: dayText ? THAI_DAY_MAP[dayText] : "",
+        dayText,
+        startTime: timeRange.startTime,
+        endTime: timeRange.endTime,
+    };
+}
+
+function extractExamInfo(value) {
+    return normalizeWhitespace(value);
 }
 
 function extractDay(text) {
@@ -303,13 +433,13 @@ function extractDay(text) {
         /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัสบดี|วันศุกร์|วันเสาร์|วันอาทิตย์)/i
     );
 
-    return dayMatch ? dayMatch[1] : "Unknown";
+    return dayMatch ? dayMatch[1] : "";
 }
 
 function extractRoom(text) {
     const lines = text
         .split("\n")
-        .map((line) => line.trim())
+        .map(normalizeWhitespace)
         .filter(Boolean);
 
     return (
@@ -324,14 +454,40 @@ function extractRoom(text) {
     );
 }
 
+function extractTeacher(text) {
+    const lines = text
+        .split("\n")
+        .map(normalizeWhitespace)
+        .filter(Boolean);
+
+    const teacherLine = lines.find((line) => {
+        return /อาจารย์|ผู้สอน|teacher|instructor/i.test(line);
+    });
+
+    if (!teacherLine) return "";
+
+    return teacherLine
+        .replace(/^(อาจารย์|ผู้สอน|teacher|instructor)\s*[:：-]?\s*/i, "")
+        .trim();
+}
+
 function getDirectTableCells(row) {
     return [...row.children].filter((child) => {
         return child instanceof HTMLTableCellElement;
     });
 }
 
+function getCellText(row, columnIndex) {
+    const cells = getDirectTableCells(row);
+    return normalizeWhitespace(cells[columnIndex]?.innerText || "");
+}
+
 function normalizeText(value) {
-    return String(value).replace(/\s+/g, " ").trim();
+    return normalizeWhitespace(value);
+}
+
+function normalizeWhitespace(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
 }
 
 function createStableSubjectId(subject) {
@@ -340,14 +496,14 @@ function createStableSubjectId(subject) {
      * use DOM index here; Angular/Vue can reorder or recreate nodes anytime.
      */
     return [
-        subject.code,
-        subject.name,
+        subject.subjectCode || subject.code,
         subject.section,
-        subject.type,
+        subject.classType || subject.type,
         subject.day,
-        subject.start,
-        subject.end,
+        subject.startTime || subject.start,
+        subject.endTime || subject.end,
         subject.room,
+        subject.building,
     ]
         .map(normalizeSubjectIdPart)
         .filter(Boolean)
@@ -355,9 +511,14 @@ function createStableSubjectId(subject) {
 }
 
 function normalizeSubjectIdPart(value) {
-    return normalizeText(value || "")
+    return normalizeWhitespace(value || "")
         .toLowerCase()
         .replace(/[|]/g, "/");
+}
+
+function debugLogParsedSubject(subject) {
+    if (!DEBUG_PARSING) return;
+    console.debug("[KSB] Parsed subject", subject);
 }
 
 async function toggleSelectedSubject(subject, checked) {
@@ -439,17 +600,59 @@ async function renderTimetable() {
         .map((subject) => {
             return `
 		<div class="ksb-selected-subject">
-			<div class="ksb-selected-subject-name">${escapeHtml(subject.name)}</div>
+			<div class="ksb-selected-subject-name">${escapeHtml(getSubjectDisplayName(subject))}</div>
 			<div class="ksb-selected-subject-meta">
-				${escapeHtml(subject.type)} |
+				${escapeHtml(getSubjectDisplayCode(subject))} |
+				${escapeHtml(getSubjectDisplayClassType(subject))} |
 				section(${escapeHtml(subject.section)}) |
-				${escapeHtml(subject.start)} - ${escapeHtml(subject.end)}
+				${escapeHtml(getSubjectDisplayDay(subject))} |
+				${escapeHtml(getSubjectStartTime(subject))} - ${escapeHtml(getSubjectEndTime(subject))}
 			</div>
-			<div class="ksb-selected-subject-room">${escapeHtml(subject.room)}</div>
+			<div class="ksb-selected-subject-room">${escapeHtml(getSubjectDisplayLocation(subject))}</div>
+			<div class="ksb-selected-subject-room">${escapeHtml(subject.teacher || "")}</div>
         </div>
 		`;
         })
         .join("");
+}
+
+function getSubjectDisplayCode(subject) {
+    return subject.subjectCode || subject.code || "";
+}
+
+function getSubjectDisplayName(subject) {
+    return subject.subjectName || subject.name || "Unknown Subject";
+}
+
+function getSubjectDisplayClassType(subject) {
+    const classType = subject.classType || subject.type || "unknown";
+    const labels = {
+        theory: "ทฤษฎี",
+        practical: "ปฏิบัติ",
+        seminar: "สัมมนา",
+        "ทฤษฎี": "ทฤษฎี",
+        "ปฏิบัติ": "ปฏิบัติ",
+        "สัมมนา": "สัมมนา",
+        unknown: "ไม่ทราบประเภท",
+    };
+
+    return labels[classType] || labels.unknown;
+}
+
+function getSubjectDisplayDay(subject) {
+    return subject.dayText || subject.day || "";
+}
+
+function getSubjectStartTime(subject) {
+    return subject.startTime || subject.start || "";
+}
+
+function getSubjectEndTime(subject) {
+    return subject.endTime || subject.end || "";
+}
+
+function getSubjectDisplayLocation(subject) {
+    return [subject.room, subject.building].filter(Boolean).join(" / ");
 }
 
 function escapeHtml(value) {
