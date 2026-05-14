@@ -33,6 +33,22 @@ const THAI_DAY_MAP = {
     "เสาร์": "Sat",
     "อาทิตย์": "Sun",
 };
+const DAY_KEY_MAP = {
+    mon: "Mon",
+    monday: "Mon",
+    tue: "Tue",
+    tuesday: "Tue",
+    wed: "Wed",
+    wednesday: "Wed",
+    thu: "Thu",
+    thursday: "Thu",
+    fri: "Fri",
+    friday: "Fri",
+    sat: "Sat",
+    saturday: "Sat",
+    sun: "Sun",
+    sunday: "Sun",
+};
 let pageScanScheduled = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
@@ -199,14 +215,14 @@ function isLikelySubjectRow(row) {
     const subjectName = getCellText(row, SUBJECT_TABLE_COLUMNS.subjectName);
     const groupCell = getCellText(row, SUBJECT_TABLE_COLUMNS.group);
     const classTime = getCellText(row, SUBJECT_TABLE_COLUMNS.classTime);
-    const dayAndTime = extractDayAndTime(classTime);
+    const schedule = parseClassScheduleText(classTime);
 
     return (
         SUBJECT_ID_PATTERN.test(subjectCode) &&
         Boolean(subjectName) &&
         Boolean(extractSectionFromGroupCell(groupCell)) &&
-        Boolean(dayAndTime.startTime) &&
-        Boolean(dayAndTime.endTime)
+        Boolean(schedule.startTime) &&
+        Boolean(schedule.endTime)
     );
 }
 
@@ -249,9 +265,9 @@ function parseSubjectElement(element) {
 function parseSubjectRow(row) {
     const rawText = row.innerText || "";
     const groupCell = getCellText(row, SUBJECT_TABLE_COLUMNS.group);
-    const dayAndTime = extractDayAndTime(getCellText(row, SUBJECT_TABLE_COLUMNS.classTime));
+    const schedule = parseClassScheduleText(getCellText(row, SUBJECT_TABLE_COLUMNS.classTime));
 
-    if (!dayAndTime.startTime || !dayAndTime.endTime) return null;
+    if (!schedule.startTime || !schedule.endTime) return null;
 
     const subject = createParsedSubject({
         subjectCode: extractSubjectCode(getCellText(row, SUBJECT_TABLE_COLUMNS.subjectCode)),
@@ -259,10 +275,10 @@ function parseSubjectRow(row) {
         credits: getCellText(row, SUBJECT_TABLE_COLUMNS.credits),
         section: extractSectionFromGroupCell(groupCell),
         classType: extractClassTypeFromGroupCell(groupCell),
-        day: dayAndTime.day,
-        dayText: dayAndTime.dayText,
-        startTime: dayAndTime.startTime,
-        endTime: dayAndTime.endTime,
+        day: schedule.day,
+        dayText: schedule.dayText,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
         room: getCellText(row, SUBJECT_TABLE_COLUMNS.room),
         building: getCellText(row, SUBJECT_TABLE_COLUMNS.building),
         teacher: getCellText(row, SUBJECT_TABLE_COLUMNS.teacher),
@@ -289,19 +305,19 @@ function parseSubjectCard(card) {
      * This parser is intentionally text-first until the real KMITL DOM is
      * inspected. If stable per-field selectors exist, replace individual
      * extract* helpers or pass selector-derived text into createParsedSubject.
-     */
+    */
     const text = card.innerText || "";
-    const timeRange = extractTimeRange(text);
+    const schedule = parseClassScheduleText(text);
 
     const subject = createParsedSubject({
         subjectCode: extractSubjectCode(text),
         subjectName: extractSubjectName(text),
         section: extractSection(text),
         classType: extractClassType(text),
-        day: extractDay(text),
-        dayText: extractDay(text),
-        startTime: timeRange.startTime,
-        endTime: timeRange.endTime,
+        day: schedule.day,
+        dayText: schedule.dayText,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
         room: extractRoom(text),
         teacher: extractTeacher(text),
         rawText: text,
@@ -325,7 +341,7 @@ function createParsedSubject(subject) {
         credits: normalizeWhitespace(subject.credits),
         section: normalizeWhitespace(subject.section),
         classType: subject.classType || "unknown",
-        day: normalizeWhitespace(subject.day),
+        day: normalizeDayKey(subject.day),
         dayText: normalizeWhitespace(subject.dayText),
         startTime: normalizeWhitespace(subject.startTime),
         endTime: normalizeWhitespace(subject.endTime),
@@ -412,16 +428,43 @@ function extractTimeRange(text) {
 }
 
 function extractDayAndTime(value) {
+    return parseClassScheduleText(value);
+}
+
+function parseClassScheduleText(value) {
     const text = normalizeWhitespace(value);
     const timeRange = extractTimeRange(text);
-    const dayText = Object.keys(THAI_DAY_MAP).find((thaiDay) => text.includes(thaiDay)) || "";
+    const dayText = extractThaiDayText(text);
 
     return {
-        day: dayText ? THAI_DAY_MAP[dayText] : "",
+        day: normalizeThaiDayToKey(dayText),
         dayText,
         startTime: timeRange.startTime,
         endTime: timeRange.endTime,
     };
+}
+
+function extractThaiDayText(value) {
+    const text = normalizeWhitespace(value);
+
+    return Object.keys(THAI_DAY_MAP).find((thaiDay) => {
+        return text.includes(thaiDay) || text.includes(`วัน${thaiDay}`);
+    }) || "";
+}
+
+function normalizeThaiDayToKey(dayText) {
+    const normalizedDayText = normalizeWhitespace(dayText).replace(/^วัน/, "");
+    return THAI_DAY_MAP[normalizedDayText] || "";
+}
+
+function normalizeDayKey(value) {
+    const normalizedValue = normalizeWhitespace(value);
+    if (!normalizedValue) return "";
+
+    const thaiDayKey = normalizeThaiDayToKey(normalizedValue);
+    if (thaiDayKey) return thaiDayKey;
+
+    return DAY_KEY_MAP[normalizedValue.toLowerCase()] || "";
 }
 
 function extractExamInfo(value) {
@@ -429,11 +472,7 @@ function extractExamInfo(value) {
 }
 
 function extractDay(text) {
-    const dayMatch = text.match(
-        /(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัสบดี|วันศุกร์|วันเสาร์|วันอาทิตย์)/i
-    );
-
-    return dayMatch ? dayMatch[1] : "";
+    return normalizeDayKey(extractThaiDayText(text) || text);
 }
 
 function extractRoom(text) {
