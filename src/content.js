@@ -674,14 +674,18 @@ async function renderSelectedSubjectPanel() {
         return;
     }
 
+    const conflicts = getSubjectConflicts(selectedSubjects);
+    const conflictingSubjectIds = getConflictingSubjectIds(conflicts);
+
     timetableElement.innerHTML = `
-        ${renderTimetableGrid(selectedSubjects)}
+        ${renderConflictWarnings(conflicts)}
+        ${renderTimetableGrid(selectedSubjects, conflictingSubjectIds)}
         ${renderUnplaceableSubjects(selectedSubjects)}
-        ${renderSelectedSubjectList(selectedSubjects)}
+        ${renderSelectedSubjectList(selectedSubjects, conflictingSubjectIds)}
     `;
 }
 
-function renderSelectedSubjectList(subjects) {
+function renderSelectedSubjectList(subjects, conflictingSubjectIds = new Set()) {
     if (subjects.length === 0) {
         return `
         <div class="ksb-empty-state">
@@ -693,12 +697,12 @@ function renderSelectedSubjectList(subjects) {
     return `
     <div class="ksb-selected-subject-list">
         <div class="ksb-selected-list-title">Selected classes</div>
-        ${subjects.map(renderSelectedSubjectCard).join("")}
+        ${subjects.map((subject) => renderSelectedSubjectCard(subject, conflictingSubjectIds)).join("")}
     </div>
     `;
 }
 
-function renderTimetableGrid(subjects) {
+function renderTimetableGrid(subjects, conflictingSubjectIds = new Set()) {
     const placeableSubjects = getPlaceableSubjects(subjects);
 
     return `
@@ -706,7 +710,7 @@ function renderTimetableGrid(subjects) {
         <div class="ksb-timetable-scroll">
             <div class="ksb-timetable-grid">
                 ${renderTimetableHeaderSlots()}
-                ${renderTimetableDayRows(placeableSubjects)}
+                ${renderTimetableDayRows(placeableSubjects, conflictingSubjectIds)}
             </div>
         </div>
     </div>
@@ -727,7 +731,7 @@ function renderTimetableHeaderSlots() {
     `;
 }
 
-function renderTimetableDayRows(subjects) {
+function renderTimetableDayRows(subjects, conflictingSubjectIds = new Set()) {
     return TIMETABLE_DAYS.map((day) => {
         const daySubjects = subjects.filter((subject) => {
             return getSubjectGridPlacement(subject).day === day;
@@ -737,7 +741,7 @@ function renderTimetableDayRows(subjects) {
         <div class="ksb-timetable-row">
             <div class="ksb-timetable-day">${escapeHtml(TIMETABLE_DAY_LABELS[day])}</div>
             ${getTimetableSlots().map(renderTimetableCell).join("")}
-            ${daySubjects.map(renderTimetableSubjectBlock).join("")}
+            ${daySubjects.map((subject) => renderTimetableSubjectBlock(subject, conflictingSubjectIds)).join("")}
         </div>
         `;
     }).join("");
@@ -747,13 +751,16 @@ function renderTimetableCell(slot) {
     return `<div class="ksb-timetable-cell" style="grid-column: ${slot.columnStart};"></div>`;
 }
 
-function renderTimetableSubjectBlock(subject) {
+function renderTimetableSubjectBlock(subject, conflictingSubjectIds = new Set()) {
     const placement = getSubjectGridPlacement(subject);
     const location = getSubjectDisplayLocation(subject);
+    const conflictClass = isSubjectConflicting(subject, conflictingSubjectIds)
+        ? " ksb-timetable-block--conflict"
+        : "";
 
     return `
     <div
-        class="ksb-timetable-block"
+        class="ksb-timetable-block${conflictClass}"
         style="grid-column: ${placement.columnStart} / span ${placement.columnSpan};"
         title="${escapeHtml(getSubjectDisplayName(subject))}"
     >
@@ -766,6 +773,35 @@ function renderTimetableSubjectBlock(subject) {
             ${escapeHtml(getSubjectStartTime(subject))} - ${escapeHtml(getSubjectEndTime(subject))}
         </div>
         ${location ? `<div class="ksb-timetable-block-location">${escapeHtml(location)}</div>` : ""}
+    </div>
+    `;
+}
+
+function renderConflictWarnings(conflicts) {
+    if (conflicts.length === 0) return "";
+
+    return `
+    <div class="ksb-conflict-warning">
+        <div class="ksb-conflict-title">Schedule conflicts</div>
+        ${conflicts.map(renderConflictItem).join("")}
+    </div>
+    `;
+}
+
+function renderConflictItem(conflict) {
+    const subjectDetails = conflict.subjects.map((subject) => {
+        return [
+            getSubjectDisplayCode(subject),
+            getSubjectDisplayName(subject),
+            subject.section ? `section(${subject.section})` : "",
+            getSubjectDisplayClassType(subject),
+        ].filter(Boolean).join(" ");
+    });
+
+    return `
+    <div class="ksb-conflict-item">
+        <strong>${escapeHtml(conflict.day)} ${escapeHtml(conflict.startTime)} - ${escapeHtml(conflict.endTime)}</strong>
+        <span>${subjectDetails.map(escapeHtml).join(" vs ")}</span>
     </div>
     `;
 }
@@ -829,6 +865,79 @@ function isSubjectPlaceable(subject) {
     return getSubjectGridPlacement(subject).canPlace;
 }
 
+function getSubjectTimeRange(subject) {
+    const placement = getSubjectGridPlacement(subject);
+    if (!placement.canPlace) return null;
+
+    const startMinutes = timeToMinutes(getSubjectStartTime(subject));
+    const endMinutes = timeToMinutes(getSubjectEndTime(subject));
+    if (startMinutes === null || endMinutes === null) return null;
+
+    return {
+        day: placement.day,
+        startMinutes,
+        endMinutes,
+        startTime: getSubjectStartTime(subject),
+        endTime: getSubjectEndTime(subject),
+    };
+}
+
+function doTimeRangesOverlap(a, b) {
+    if (!a || !b) return false;
+    if (a.day !== b.day) return false;
+
+    return a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes;
+}
+
+function getSubjectConflicts(subjects) {
+    const placeableSubjects = getPlaceableSubjects(subjects);
+    const conflicts = [];
+
+    for (let firstIndex = 0; firstIndex < placeableSubjects.length; firstIndex += 1) {
+        for (
+            let secondIndex = firstIndex + 1;
+            secondIndex < placeableSubjects.length;
+            secondIndex += 1
+        ) {
+            const firstSubject = placeableSubjects[firstIndex];
+            const secondSubject = placeableSubjects[secondIndex];
+            const firstRange = getSubjectTimeRange(firstSubject);
+            const secondRange = getSubjectTimeRange(secondSubject);
+
+            if (!doTimeRangesOverlap(firstRange, secondRange)) continue;
+
+            const startMinutes = Math.min(firstRange.startMinutes, secondRange.startMinutes);
+            const endMinutes = Math.max(firstRange.endMinutes, secondRange.endMinutes);
+
+            conflicts.push({
+                id: [firstSubject.id, secondSubject.id].sort().join("|"),
+                day: firstRange.day,
+                startTime: minutesToTimeLabel(startMinutes),
+                endTime: minutesToTimeLabel(endMinutes),
+                subjects: [firstSubject, secondSubject],
+            });
+        }
+    }
+
+    return conflicts;
+}
+
+function getConflictingSubjectIds(conflicts) {
+    const subjectIds = new Set();
+
+    conflicts.forEach((conflict) => {
+        conflict.subjects.forEach((subject) => {
+            if (subject.id) subjectIds.add(subject.id);
+        });
+    });
+
+    return subjectIds;
+}
+
+function isSubjectConflicting(subject, conflictingSubjectIds) {
+    return Boolean(subject.id && conflictingSubjectIds.has(subject.id));
+}
+
 function getSubjectGridPlacement(subject) {
     const day = normalizeDayKey(subject.day || subject.dayText);
     const startMinutes = timeToMinutes(getSubjectStartTime(subject));
@@ -875,7 +984,7 @@ function minutesToTimeLabel(minutes) {
     return `${String(hours).padStart(2, "0")}:${String(minutePart).padStart(2, "0")}`;
 }
 
-function renderSelectedSubjectCard(subject) {
+function renderSelectedSubjectCard(subject, conflictingSubjectIds = new Set()) {
     const subjectId = escapeHtml(subject.id || "");
     const code = getSubjectDisplayCode(subject);
     const metaParts = getSubjectCardMetaParts(subject)
@@ -884,9 +993,12 @@ function renderSelectedSubjectCard(subject) {
     const location = getSubjectDisplayLocation(subject);
     const teacher = normalizeWhitespace(subject.teacher);
     const rawText = String(subject.rawText || "").trim();
+    const conflictClass = isSubjectConflicting(subject, conflictingSubjectIds)
+        ? " ksb-selected-subject--conflict"
+        : "";
 
     return `
-    <div class="ksb-selected-subject" data-ksb-selected-subject-id="${subjectId}">
+    <div class="ksb-selected-subject${conflictClass}" data-ksb-selected-subject-id="${subjectId}">
         <div class="ksb-selected-subject-top">
             <div class="ksb-selected-subject-title">
                 <div class="ksb-selected-subject-name">${escapeHtml(getSubjectDisplayName(subject))}</div>

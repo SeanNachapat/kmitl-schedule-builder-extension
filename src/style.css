@@ -95,6 +95,40 @@
     text-align: center;
 }
 
+.ksb-conflict-warning {
+    margin-bottom: 12px;
+    padding: 9px;
+    border: 1px solid #facc15;
+    border-left: 3px solid #facc15;
+    border-radius: 8px;
+    background: #422006;
+    color: #fef3c7;
+}
+
+.ksb-conflict-title {
+    margin-bottom: 6px;
+    color: #fde68a;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ksb-conflict-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #fef3c7;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.ksb-conflict-item + .ksb-conflict-item {
+    margin-top: 7px;
+}
+
+.ksb-conflict-item span {
+    color: #fde68a;
+}
+
 .ksb-timetable-section {
     margin-bottom: 12px;
 }
@@ -193,6 +227,13 @@
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
 }
 
+.ksb-timetable-block--conflict {
+    border-color: #facc15;
+    border-left-color: #facc15;
+    background: #92400e;
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.28), 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
 .ksb-timetable-block-name {
     display: -webkit-box;
     overflow: hidden;
@@ -258,6 +299,11 @@
     border-left: 3px solid #f97316;
     border-radius: 8px;
     background: #1e293b;
+}
+
+.ksb-selected-subject--conflict {
+    border-left-color: #facc15;
+    background: #2f2a18;
 }
 
 .ksb-selected-subject-top {
