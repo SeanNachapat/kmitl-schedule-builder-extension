@@ -7,6 +7,8 @@ const SUBJECT_ID_PATTERN = /\b\d{8}\b/;
 const TIME_RANGE_PATTERN = /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/;
 const SECTION_PATTERN = /section\s*\(([^)]+)\)/i;
 let pageScanScheduled = false;
+let checkboxInjectionInProgress = false;
+let checkboxInjectionPending = false;
 
 function init() {
     observePageChanges();
@@ -56,36 +58,54 @@ function injectExtensionUi() {
     renderTimetable();
 }
 
-function injectCheckboxesIntoSubjectCards() {
-    const cards = findSubjectCards();
+async function injectCheckboxesIntoSubjectCards() {
+    if (checkboxInjectionInProgress) {
+        checkboxInjectionPending = true;
+        return;
+    }
 
-    cards.forEach((card, index) => {
-        if (card.hasAttribute(EXTENSION_FLAG)) return;
-        if (card.querySelector(CHECKBOX_WRAPPER_SELECTOR)) return;
+    checkboxInjectionInProgress = true;
 
-        const subject = parseSubjectElement(card, index);
-        if (!subject) return;
+    try {
+        const cards = findSubjectCards();
+        const selectedSubjects = await getSelectedSubjects();
 
-        card.setAttribute(EXTENSION_FLAG, EXTENSION_PROCESSED_VALUE);
+        cards.forEach((card) => {
+            if (card.hasAttribute(EXTENSION_FLAG)) return;
+            if (card.querySelector(CHECKBOX_WRAPPER_SELECTOR)) return;
 
-        const checkboxWrapper = document.createElement("label");
-        checkboxWrapper.className = "ksb-checkbox-wrapper";
+            const subject = parseSubjectElement(card);
+            if (!subject) return;
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.className = "ksb-subject-checkbox";
-        checkbox.dataset.subjectId = subject.id;
+            card.setAttribute(EXTENSION_FLAG, EXTENSION_PROCESSED_VALUE);
 
-        checkbox.addEventListener("change", async () => {
-            await toggleSelectedSubject(subject, checkbox.checked);
-            await renderTimetable();
+            const checkboxWrapper = document.createElement("label");
+            checkboxWrapper.className = "ksb-checkbox-wrapper";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "ksb-subject-checkbox";
+            checkbox.dataset.subjectId = subject.id;
+            checkbox.checked = isSubjectSelected(subject.id, selectedSubjects);
+
+            checkbox.addEventListener("change", async () => {
+                await toggleSelectedSubject(subject, checkbox.checked);
+                await renderTimetable();
+            });
+
+            checkboxWrapper.appendChild(checkbox);
+            checkboxWrapper.appendChild(document.createTextNode(" Add"));
+
+            getCheckboxInjectionTarget(card).prepend(checkboxWrapper);
         });
+    } finally {
+        checkboxInjectionInProgress = false;
 
-        checkboxWrapper.appendChild(checkbox);
-        checkboxWrapper.appendChild(document.createTextNode(" Add"));
-
-        getCheckboxInjectionTarget(card).prepend(checkboxWrapper);
-    });
+        if (checkboxInjectionPending) {
+            checkboxInjectionPending = false;
+            schedulePageScan();
+        }
+    }
 }
 
 function schedulePageScan() {
@@ -177,15 +197,15 @@ function getCheckboxInjectionTarget(element) {
     return element;
 }
 
-function parseSubjectElement(element, index) {
+function parseSubjectElement(element) {
     if (element instanceof HTMLTableRowElement && isLikelyKmitlTableRow(element)) {
-        return parseKmitlTableSubjectRow(element, index);
+        return parseKmitlTableSubjectRow(element);
     }
 
-    return parseSubjectCard(element, index);
+    return parseSubjectCard(element);
 }
 
-function parseKmitlTableSubjectRow(row, index) {
+function parseKmitlTableSubjectRow(row) {
     const cells = getDirectTableCells(row);
     const cellTexts = cells.map((cell) => normalizeText(cell.innerText));
     const subjectIdIndex = cellTexts.findIndex((text) => SUBJECT_ID_PATTERN.test(text));
@@ -201,8 +221,8 @@ function parseKmitlTableSubjectRow(row, index) {
 
     if (!timeMatch) return null;
 
-    return {
-        id: `${subjectId}-${cellTexts[sectionIndex]}-${timeMatch[1]}-${timeMatch[2]}-${index}`,
+    const subject = {
+        code: subjectId,
         name: cellTexts[subjectIdIndex + 1] || extractSubjectName(row.innerText || ""),
         section: cellTexts[sectionIndex],
         type: extractSubjectType(row.innerText || ""),
@@ -212,9 +232,14 @@ function parseKmitlTableSubjectRow(row, index) {
         room: extractRoom(row.innerText || ""),
         rawText: row.innerText || "",
     };
+
+    return {
+        ...subject,
+        id: createStableSubjectId(subject),
+    };
 }
 
-function parseSubjectCard(card, index) {
+function parseSubjectCard(card) {
     const text = card.innerText || "";
 
     const timeMatch = text.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
@@ -225,8 +250,8 @@ function parseSubjectCard(card, index) {
     const name = extractSubjectName(text);
     const type = extractSubjectType(text);
 
-    return {
-        id: `${name}-${sectionMatch[1]}-${timeMatch[1]}-${timeMatch[2]}-${index}`,
+    const subject = {
+        code: extractSubjectCode(text),
         name,
         section: sectionMatch[1],
         type,
@@ -235,6 +260,11 @@ function parseSubjectCard(card, index) {
         end: timeMatch[2],
         room: extractRoom(text),
         rawText: text,
+    };
+
+    return {
+        ...subject,
+        id: createStableSubjectId(subject),
     };
 }
 
@@ -253,6 +283,11 @@ function extractSubjectName(text) {
     });
 
     return subjectLine || "Unknown Subject";
+}
+
+function extractSubjectCode(text) {
+    const subjectIdMatch = text.match(SUBJECT_ID_PATTERN);
+    return subjectIdMatch ? subjectIdMatch[0] : "";
 }
 
 function extractSubjectType(text) {
@@ -299,6 +334,32 @@ function normalizeText(value) {
     return String(value).replace(/\s+/g, " ").trim();
 }
 
+function createStableSubjectId(subject) {
+    /*
+     * Stable IDs let storage survive page refreshes and SPA rerenders. Do not
+     * use DOM index here; Angular/Vue can reorder or recreate nodes anytime.
+     */
+    return [
+        subject.code,
+        subject.name,
+        subject.section,
+        subject.type,
+        subject.day,
+        subject.start,
+        subject.end,
+        subject.room,
+    ]
+        .map(normalizeSubjectIdPart)
+        .filter(Boolean)
+        .join("|");
+}
+
+function normalizeSubjectIdPart(value) {
+    return normalizeText(value || "")
+        .toLowerCase()
+        .replace(/[|]/g, "/");
+}
+
 async function toggleSelectedSubject(subject, checked) {
     const selectedSubjects = await getSelectedSubjects();
 
@@ -309,20 +370,44 @@ async function toggleSelectedSubject(subject, checked) {
 		]
         : selectedSubjects.filter((item) => item.id !== subject.id);
 
-    await chrome.storage.local.set({
-        [STORAGE_KEY]: nextSubjects,
-    });
+    await saveSelectedSubjects(nextSubjects);
 }
 
 async function getSelectedSubjects() {
     const result = await chrome.storage.local.get(STORAGE_KEY);
-    return result[STORAGE_KEY] || [];
+    const selectedSubjects = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+    const normalizedSubjects = normalizeSelectedSubjects(selectedSubjects);
+
+    if (normalizedSubjects.length !== selectedSubjects.length) {
+        await saveSelectedSubjects(normalizedSubjects);
+    }
+
+    return normalizedSubjects;
+}
+
+async function saveSelectedSubjects(subjects) {
+    await chrome.storage.local.set({
+        [STORAGE_KEY]: normalizeSelectedSubjects(subjects),
+    });
+}
+
+function normalizeSelectedSubjects(subjects) {
+    const subjectsById = new Map();
+
+    subjects.forEach((subject) => {
+        if (!subject || !subject.id) return;
+        subjectsById.set(subject.id, subject);
+    });
+
+    return [...subjectsById.values()];
+}
+
+function isSubjectSelected(subjectId, selectedSubjects) {
+    return selectedSubjects.some((subject) => subject.id === subjectId);
 }
 
 async function clearSelectedSubjects() {
-    await chrome.storage.local.set({
-        [STORAGE_KEY]: [],
-    });
+    await saveSelectedSubjects([]);
 
     document.querySelectorAll(".ksb-subject-checkbox").forEach((checkbox) => {
         checkbox.checked = false;
