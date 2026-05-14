@@ -52,6 +52,7 @@ const DAY_KEY_MAP = {
 let pageScanScheduled = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
+let showRawTextDebug = false;
 
 function init() {
     observePageChanges();
@@ -84,7 +85,13 @@ function injectExtensionUi() {
 			<button id="ksb-clear-button">Clear</button>
 		</div>
     </div>
-    <div id="ksb-selected-count">Selected: 0</div>
+    <div class="ksb-panel-toolbar">
+        <div id="ksb-selected-count">Selected: 0</div>
+        <label class="ksb-debug-toggle">
+            <input id="ksb-debug-toggle" type="checkbox">
+            Debug raw text
+        </label>
+    </div>
     <div id="ksb-timetable"></div>
 	`;
 
@@ -97,6 +104,23 @@ function injectExtensionUi() {
     document
         .querySelector("#ksb-clear-button")
         .addEventListener("click", clearSelectedSubjects);
+
+    panel.addEventListener("click", async (event) => {
+        if (!(event.target instanceof Element)) return;
+
+        const removeButton = event.target.closest("[data-ksb-remove-subject-id]");
+        if (!(removeButton instanceof HTMLElement)) return;
+
+        await removeSelectedSubject(removeButton.dataset.ksbRemoveSubjectId);
+    });
+
+    panel.addEventListener("change", async (event) => {
+        if (!(event.target instanceof HTMLInputElement)) return;
+        if (event.target.id !== "ksb-debug-toggle") return;
+
+        showRawTextDebug = event.target.checked;
+        await renderTimetable();
+    });
 
     renderTimetable();
 }
@@ -609,50 +633,114 @@ function isSubjectSelected(subjectId, selectedSubjects) {
 async function clearSelectedSubjects() {
     await saveSelectedSubjects([]);
 
-    document.querySelectorAll(".ksb-subject-checkbox").forEach((checkbox) => {
-        checkbox.checked = false;
-    });
+    syncAllVisibleCheckboxes([]);
 
     await renderTimetable();
 }
 
 async function renderTimetable() {
+    await renderSelectedSubjectPanel();
+}
+
+async function renderSelectedSubjectPanel() {
     const selectedSubjects = await getSelectedSubjects();
 
     const countElement = document.querySelector("#ksb-selected-count");
     const timetableElement = document.querySelector("#ksb-timetable");
+    const debugToggle = document.querySelector("#ksb-debug-toggle");
 
     if (!countElement || !timetableElement) return;
 
+    syncAllVisibleCheckboxes(selectedSubjects);
     countElement.textContent = `Selected: ${selectedSubjects.length}`;
+    if (debugToggle) debugToggle.checked = showRawTextDebug;
 
-    if (selectedSubjects.length === 0) {
-        timetableElement.innerHTML = `
-		<div class="ksb-empty-state">
-			Select subjects from the page to build your timetable.
-		</div>
-    `;
-        return;
+    timetableElement.innerHTML = renderSelectedSubjectList(selectedSubjects);
+}
+
+function renderSelectedSubjectList(subjects) {
+    if (subjects.length === 0) {
+        return `
+        <div class="ksb-empty-state">
+            Select class rows from the table to build your timetable.
+        </div>
+        `;
     }
 
-    timetableElement.innerHTML = selectedSubjects
-        .map((subject) => {
-            return `
-		<div class="ksb-selected-subject">
-			<div class="ksb-selected-subject-name">${escapeHtml(getSubjectDisplayName(subject))}</div>
-			<div class="ksb-selected-subject-meta">
-				${escapeHtml(getSubjectDisplayCode(subject))} |
-				${escapeHtml(getSubjectDisplayClassType(subject))} |
-				section(${escapeHtml(subject.section)}) |
-				${escapeHtml(getSubjectDisplayDay(subject))} |
-				${escapeHtml(getSubjectStartTime(subject))} - ${escapeHtml(getSubjectEndTime(subject))}
-			</div>
-			<div class="ksb-selected-subject-room">${escapeHtml(getSubjectDisplayLocation(subject))}</div>
-			<div class="ksb-selected-subject-room">${escapeHtml(subject.teacher || "")}</div>
+    return subjects.map(renderSelectedSubjectCard).join("");
+}
+
+function renderSelectedSubjectCard(subject) {
+    const subjectId = escapeHtml(subject.id || "");
+    const code = getSubjectDisplayCode(subject);
+    const metaParts = getSubjectCardMetaParts(subject)
+        .map(escapeHtml)
+        .join(" | ");
+    const location = getSubjectDisplayLocation(subject);
+    const teacher = normalizeWhitespace(subject.teacher);
+    const rawText = String(subject.rawText || "").trim();
+
+    return `
+    <div class="ksb-selected-subject" data-ksb-selected-subject-id="${subjectId}">
+        <div class="ksb-selected-subject-top">
+            <div class="ksb-selected-subject-title">
+                <div class="ksb-selected-subject-name">${escapeHtml(getSubjectDisplayName(subject))}</div>
+                ${code ? `<div class="ksb-selected-subject-code">${escapeHtml(code)}</div>` : ""}
+            </div>
+            <button
+                class="ksb-remove-subject-button"
+                type="button"
+                data-ksb-remove-subject-id="${subjectId}"
+                aria-label="Remove selected subject"
+            >
+                Remove
+            </button>
         </div>
-		`;
-        })
-        .join("");
+        ${metaParts ? `<div class="ksb-selected-subject-meta">${metaParts}</div>` : ""}
+        ${location ? `<div class="ksb-selected-subject-room">${escapeHtml(location)}</div>` : ""}
+        ${teacher ? `<div class="ksb-selected-subject-teacher">${escapeHtml(teacher)}</div>` : ""}
+        ${showRawTextDebug && rawText ? `<pre class="ksb-selected-subject-raw">${escapeHtml(rawText)}</pre>` : ""}
+    </div>
+    `;
+}
+
+async function removeSelectedSubject(subjectId) {
+    if (!subjectId) return;
+
+    const selectedSubjects = await getSelectedSubjects();
+    const nextSubjects = selectedSubjects.filter((subject) => subject.id !== subjectId);
+
+    await saveSelectedSubjects(nextSubjects);
+    syncVisibleCheckboxState(subjectId, false);
+    await renderSelectedSubjectPanel();
+}
+
+function syncVisibleCheckboxState(subjectId, checked) {
+    document.querySelectorAll(".ksb-subject-checkbox").forEach((checkbox) => {
+        if (checkbox.dataset.subjectId === subjectId) {
+            checkbox.checked = checked;
+        }
+    });
+}
+
+function syncAllVisibleCheckboxes(selectedSubjects) {
+    document.querySelectorAll(".ksb-subject-checkbox").forEach((checkbox) => {
+        checkbox.checked = isSubjectSelected(checkbox.dataset.subjectId, selectedSubjects);
+    });
+}
+
+function getSubjectCardMetaParts(subject) {
+    const timeRange = [getSubjectStartTime(subject), getSubjectEndTime(subject)]
+        .filter(Boolean)
+        .join(" - ");
+
+    return [
+        subject.credits,
+        subject.section ? `section(${subject.section})` : "",
+        getSubjectDisplayClassType(subject),
+        getSubjectDisplayDay(subject),
+        timeRange,
+    ].filter(Boolean);
 }
 
 function getSubjectDisplayCode(subject) {

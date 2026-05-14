@@ -60,9 +60,30 @@
 }
 
 #ksb-selected-count {
-    margin-bottom: 10px;
     color: #cbd5e1;
     font-size: 12px;
+}
+
+.ksb-panel-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.ksb-debug-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #cbd5e1;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ksb-debug-toggle input {
+    accent-color: #f97316;
 }
 
 .ksb-empty-state {
@@ -82,16 +103,69 @@
     background: #1e293b;
 }
 
+.ksb-selected-subject-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.ksb-selected-subject-title {
+    min-width: 0;
+}
+
 .ksb-selected-subject-name {
     margin-bottom: 4px;
     color: #fb923c;
     font-size: 13px;
     font-weight: 700;
+    line-height: 1.3;
+}
+
+.ksb-selected-subject-code {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.ksb-remove-subject-button {
+    flex: 0 0 auto;
+    padding: 3px 7px;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+    background: transparent;
+    color: #e2e8f0;
+    font-size: 11px;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.ksb-remove-subject-button:hover {
+    border-color: #fb923c;
+    color: #fb923c;
 }
 
 .ksb-selected-subject-meta,
-.ksb-selected-subject-room {
+.ksb-selected-subject-room,
+.ksb-selected-subject-teacher {
     color: #cbd5e1;
     font-size: 12px;
     line-height: 1.4;
+}
+
+.ksb-selected-subject-raw {
+    max-height: 160px;
+    overflow: auto;
+    margin: 8px 0 0;
+    padding: 8px;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #020617;
+    color: #cbd5e1;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
