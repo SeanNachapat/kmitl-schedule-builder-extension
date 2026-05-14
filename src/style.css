@@ -86,6 +86,36 @@
     accent-color: #f97316;
 }
 
+.ksb-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.ksb-export-button {
+    padding: 4px 8px;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    background: #111827;
+    color: #e2e8f0;
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.ksb-export-button:hover {
+    border-color: #fb923c;
+    color: #fb923c;
+}
+
+.ksb-copy-status {
+    color: #cbd5e1;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
 .ksb-empty-state {
     padding: 16px;
     border: 1px dashed #475569;

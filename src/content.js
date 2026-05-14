@@ -67,6 +67,8 @@ let pageScanScheduled = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
 let showRawTextDebug = false;
+let copyStatusTimer = null;
+let latestSelectedSubjects = [];
 
 function init() {
     observePageChanges();
@@ -106,6 +108,12 @@ function injectExtensionUi() {
             Debug raw text
         </label>
     </div>
+    <div class="ksb-export-actions">
+        <button class="ksb-export-button" type="button" data-ksb-copy="classes">Copy Classes</button>
+        <button class="ksb-export-button" type="button" data-ksb-copy="timetable">Copy Timetable</button>
+        <button class="ksb-export-button" type="button" data-ksb-copy="groups">Copy Groups</button>
+        <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
+    </div>
     <div id="ksb-timetable"></div>
 	`;
 
@@ -121,6 +129,12 @@ function injectExtensionUi() {
 
     panel.addEventListener("click", async (event) => {
         if (!(event.target instanceof Element)) return;
+
+        const copyButton = event.target.closest("[data-ksb-copy]");
+        if (copyButton instanceof HTMLElement) {
+            await handleCopyAction(copyButton.dataset.ksbCopy);
+            return;
+        }
 
         const removeButton = event.target.closest("[data-ksb-remove-subject-id]");
         if (!(removeButton instanceof HTMLElement)) return;
@@ -658,6 +672,7 @@ async function renderTimetable() {
 
 async function renderSelectedSubjectPanel() {
     const selectedSubjects = await getSelectedSubjects();
+    latestSelectedSubjects = selectedSubjects;
 
     const countElement = document.querySelector("#ksb-selected-count");
     const timetableElement = document.querySelector("#ksb-timetable");
@@ -1011,6 +1026,235 @@ function renderDuplicateSelectionItem(duplicate) {
         <em>${duplicateDetails.map(escapeHtml).join(" vs ")}</em>
     </div>
     `;
+}
+
+async function handleCopyAction(copyType) {
+    const selectedSubjects = latestSelectedSubjects;
+    if (selectedSubjects.length === 0) {
+        setCopyStatus("Nothing to copy");
+        return;
+    }
+
+    const copyConfig = {
+        classes: {
+            text: buildSelectedClassesText(selectedSubjects),
+            successMessage: "Copied selected classes",
+        },
+        timetable: {
+            text: buildTimetableSummaryText(selectedSubjects),
+            successMessage: "Copied timetable summary",
+        },
+        groups: {
+            text: buildSubjectGroupsText(selectedSubjects),
+            successMessage: "Copied subject groups",
+        },
+    };
+    const config = copyConfig[copyType];
+
+    if (!config || !normalizeWhitespace(config.text)) {
+        setCopyStatus("Nothing to copy");
+        return;
+    }
+
+    try {
+        await copyTextToClipboard(config.text);
+        setCopyStatus(config.successMessage);
+    } catch {
+        setCopyStatus("Copy failed");
+    }
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "0";
+
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+        const copied = document.execCommand("copy");
+        if (!copied) throw new Error("Clipboard copy command failed");
+    } finally {
+        textarea.remove();
+    }
+}
+
+function setCopyStatus(message) {
+    const statusElement = document.querySelector("#ksb-copy-status");
+    if (!statusElement) return;
+
+    statusElement.textContent = message;
+    clearCopyStatusLater();
+}
+
+function clearCopyStatusLater() {
+    window.clearTimeout(copyStatusTimer);
+    copyStatusTimer = window.setTimeout(() => {
+        const statusElement = document.querySelector("#ksb-copy-status");
+        if (statusElement) statusElement.textContent = "";
+    }, 2500);
+}
+
+function buildSelectedClassesText(subjects) {
+    return [
+        "KMITL Schedule Builder - Selected Classes",
+        "",
+        ...subjects.flatMap((subject, index) => [
+            `${index + 1}. ${formatSelectedClassHeading(subject)}`,
+            ...formatSubjectDetailedText(subject).map((line) => `   ${line}`),
+            "",
+        ]),
+    ].join("\n").trim();
+}
+
+function buildTimetableSummaryText(subjects) {
+    const subjectsByDay = getSubjectsSortedByDayAndTime(subjects);
+    const conflicts = getSubjectConflicts(subjects);
+    const unplaceableSubjects = getUnplaceableSubjects(subjects);
+    const lines = ["KMITL Schedule Builder - Timetable Summary", ""];
+
+    TIMETABLE_DAYS.forEach((day) => {
+        const daySubjects = subjectsByDay.get(day) || [];
+
+        lines.push(TIMETABLE_DAY_LABELS[day]);
+
+        if (daySubjects.length === 0) {
+            lines.push("- No selected classes");
+        } else {
+            daySubjects.forEach((subject) => {
+                lines.push(`- ${formatSubjectTextLine(subject)}`);
+            });
+        }
+
+        lines.push("");
+    });
+
+    if (conflicts.length > 0) {
+        lines.push("Conflicts:");
+        conflicts.forEach((conflict) => {
+            lines.push(`- ${formatConflictText(conflict)}`);
+        });
+        lines.push("");
+    }
+
+    if (unplaceableSubjects.length > 0) {
+        lines.push("Unplaceable:");
+        unplaceableSubjects.forEach((subject) => {
+            lines.push(`- ${formatUnplaceableText(subject)}`);
+        });
+    }
+
+    return lines.join("\n").trim();
+}
+
+function buildSubjectGroupsText(subjects) {
+    const groupSummaries = getSubjectGroupSummary(subjects);
+    if (groupSummaries.length === 0) return "";
+
+    return [
+        "KMITL Schedule Builder - Subject Groups",
+        "",
+        ...groupSummaries.flatMap((groupSummary) => {
+            const representativeSubject = groupSummary.subjects[0];
+            const subjectHeader = [
+                getSubjectDisplayCode(representativeSubject),
+                getSubjectDisplayName(representativeSubject),
+            ].filter(Boolean).join(" ");
+
+            return [
+                subjectHeader,
+                ...groupSummary.subjects.map((subject) => `- ${formatSubjectGroupTextLine(subject)}`),
+                "",
+            ];
+        }),
+    ].join("\n").trim();
+}
+
+function getSubjectsSortedByDayAndTime(subjects) {
+    const subjectsByDay = new Map(TIMETABLE_DAYS.map((day) => [day, []]));
+
+    getPlaceableSubjects(subjects).forEach((subject) => {
+        const placement = getSubjectGridPlacement(subject);
+        subjectsByDay.get(placement.day).push(subject);
+    });
+
+    TIMETABLE_DAYS.forEach((day) => {
+        subjectsByDay.get(day).sort((firstSubject, secondSubject) => {
+            return (
+                timeToMinutes(getSubjectStartTime(firstSubject)) -
+                timeToMinutes(getSubjectStartTime(secondSubject))
+            );
+        });
+    });
+
+    return subjectsByDay;
+}
+
+function formatSelectedClassHeading(subject) {
+    return [
+        getSubjectDisplayCode(subject),
+        getSubjectDisplayName(subject),
+    ].filter(Boolean).join(" ");
+}
+
+function formatSubjectTextLine(subject) {
+    return [
+        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        [
+            getSubjectDisplayCode(subject),
+            getSubjectDisplayName(subject),
+        ].filter(Boolean).join(" "),
+        getSubjectDisplayClassType(subject),
+        subject.section ? `section(${subject.section})` : "",
+        getSubjectDisplayLocation(subject),
+    ].filter(Boolean).join(" | ");
+}
+
+function formatSubjectDetailedText(subject) {
+    return [
+        `Type: ${getSubjectDisplayClassType(subject)}`,
+        subject.section ? `Section: ${subject.section}` : "",
+        `Time: ${[getSubjectDisplayDay(subject), [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - ")].filter(Boolean).join(" ") || "Unknown"}`,
+        getSubjectDisplayLocation(subject) ? `Room: ${getSubjectDisplayLocation(subject)}` : "",
+        subject.teacher ? `Teacher: ${subject.teacher}` : "",
+    ].filter(Boolean);
+}
+
+function formatSubjectGroupTextLine(subject) {
+    return [
+        getSubjectDisplayClassType(subject),
+        subject.section ? `section(${subject.section})` : "",
+        getSubjectDisplayDay(subject),
+        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+    ].filter(Boolean).join(" | ");
+}
+
+function formatConflictText(conflict) {
+    const conflictSubjects = conflict.subjects.map((subject) => {
+        return [
+            getSubjectDisplayName(subject),
+            subject.section ? `section(${subject.section})` : "",
+        ].filter(Boolean).join(" ");
+    });
+
+    return `${conflict.day} ${conflict.startTime} - ${conflict.endTime} | ${conflictSubjects.join(" vs ")}`;
+}
+
+function formatUnplaceableText(subject) {
+    return [
+        getSubjectDisplayName(subject),
+        subject.section ? `section(${subject.section})` : "",
+        [getSubjectDisplayDay(subject), [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - ")].filter(Boolean).join(" ") || "Unknown day/time",
+    ].filter(Boolean).join(" | ");
 }
 
 function renderUnplaceableSubjects(subjects) {
