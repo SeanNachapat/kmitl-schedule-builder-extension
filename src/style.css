@@ -21,14 +21,14 @@
 
 #kmitl-schedule-builder-panel {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
-    width: min(900px, calc(100vw - 40px));
-    max-height: 70vh;
+    right: 16px;
+    bottom: 16px;
+    width: min(920px, calc(100vw - 32px));
+    max-height: min(78vh, 760px);
     overflow: auto;
     padding: 12px;
     border: 1px solid #334155;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #0f172a;
     color: #f8fafc;
     font-family: Arial, sans-serif;
@@ -36,27 +36,93 @@
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
+#kmitl-schedule-builder-panel.ksb-panel--collapsed {
+    width: min(360px, calc(100vw - 32px));
+    max-height: none;
+    overflow: visible;
+}
+
+#kmitl-schedule-builder-panel.ksb-panel--collapsed .ksb-panel-body {
+    display: none;
+}
+
+#kmitl-schedule-builder-panel.ksb-panel--collapsed #ksb-render-button,
+#kmitl-schedule-builder-panel.ksb-panel--collapsed #ksb-clear-button {
+    display: none;
+}
+
 .ksb-panel-header {
+    position: sticky;
+    top: -12px;
+    z-index: 3;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 8px;
+    margin: -12px -12px 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #1e293b;
+    background: #0f172a;
     color: #fb923c;
+}
+
+.ksb-panel-title {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ksb-panel-title strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ksb-selected-count-compact {
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.2;
 }
 
 .ksb-panel-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
+    justify-content: flex-end;
 }
 
-.ksb-panel-actions button {
+.ksb-panel-actions button,
+.ksb-export-button,
+.ksb-section-toggle,
+.ksb-remove-subject-button {
     padding: 4px 8px;
-    border: 1px solid #f97316;
+    border: 1px solid #475569;
     border-radius: 6px;
-    background: transparent;
-    color: #fb923c;
+    background: #111827;
+    color: #e2e8f0;
+    font-size: 12px;
+    line-height: 1.2;
     cursor: pointer;
+}
+
+.ksb-panel-actions button:hover,
+.ksb-export-button:hover,
+.ksb-section-toggle:hover,
+.ksb-remove-subject-button:hover {
+    border-color: #fb923c;
+    color: #fb923c;
+}
+
+.ksb-panel-actions button:focus-visible,
+.ksb-export-button:focus-visible,
+.ksb-section-toggle:focus-visible,
+.ksb-remove-subject-button:focus-visible,
+.ksb-debug-toggle input:focus-visible,
+.ksb-subject-checkbox:focus-visible {
+    outline: 2px solid #facc15;
+    outline-offset: 2px;
 }
 
 #ksb-selected-count {
@@ -67,9 +133,20 @@
 .ksb-panel-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 10px;
+}
+
+.ksb-section-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ksb-section-toggle[aria-expanded="true"] {
+    border-color: #fb923c;
+    color: #fb923c;
 }
 
 .ksb-debug-toggle {
@@ -95,19 +172,7 @@
 }
 
 .ksb-export-button {
-    padding: 4px 8px;
-    border: 1px solid #475569;
-    border-radius: 6px;
-    background: #111827;
-    color: #e2e8f0;
-    font-size: 12px;
-    line-height: 1.2;
-    cursor: pointer;
-}
-
-.ksb-export-button:hover {
-    border-color: #fb923c;
-    color: #fb923c;
+    min-height: 24px;
 }
 
 .ksb-copy-status {
@@ -117,7 +182,7 @@
 }
 
 .ksb-empty-state {
-    padding: 16px;
+    padding: 14px;
     border: 1px dashed #475569;
     border-radius: 8px;
     color: #94a3b8;
@@ -464,19 +529,8 @@
 
 .ksb-remove-subject-button {
     flex: 0 0 auto;
-    padding: 3px 7px;
-    border: 1px solid #64748b;
-    border-radius: 6px;
     background: transparent;
-    color: #e2e8f0;
     font-size: 11px;
-    line-height: 1.2;
-    cursor: pointer;
-}
-
-.ksb-remove-subject-button:hover {
-    border-color: #fb923c;
-    color: #fb923c;
 }
 
 .ksb-selected-subject-meta,
@@ -501,4 +555,28 @@
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+@media (max-width: 640px) {
+    #kmitl-schedule-builder-panel,
+    #kmitl-schedule-builder-panel.ksb-panel--collapsed {
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        width: auto;
+        max-height: min(82vh, 760px);
+    }
+
+    .ksb-panel-header {
+        align-items: flex-start;
+    }
+
+    .ksb-panel-actions {
+        max-width: 52%;
+    }
+
+    .ksb-panel-toolbar,
+    .ksb-export-actions {
+        align-items: flex-start;
+    }
 }

@@ -69,6 +69,9 @@ let checkboxInjectionPending = false;
 let showRawTextDebug = false;
 let copyStatusTimer = null;
 let latestSelectedSubjects = [];
+let isPanelCollapsed = false;
+let showSubjectGroups = false;
+let showSelectedList = false;
 
 function init() {
     observePageChanges();
@@ -95,26 +98,60 @@ function injectExtensionUi() {
 
     panel.innerHTML = `
     <div class="ksb-panel-header">
-		<strong>KMITL Schedule Builder</strong>
+        <div class="ksb-panel-title">
+            <strong>KMITL Schedule Builder</strong>
+            <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">Selected: 0</span>
+        </div>
 		<div class="ksb-panel-actions">
-			<button id="ksb-render-button">Render</button>
-			<button id="ksb-clear-button">Clear</button>
+			<button id="ksb-render-button" type="button">Refresh</button>
+			<button id="ksb-clear-button" type="button">Clear</button>
+            <button
+                id="ksb-collapse-button"
+                type="button"
+                data-ksb-toggle-panel
+                aria-label="Hide KMITL Schedule Builder panel"
+                aria-expanded="true"
+            >
+                Hide
+            </button>
 		</div>
     </div>
-    <div class="ksb-panel-toolbar">
-        <div id="ksb-selected-count">Selected: 0</div>
-        <label class="ksb-debug-toggle">
-            <input id="ksb-debug-toggle" type="checkbox">
-            Debug raw text
-        </label>
+    <div class="ksb-panel-body">
+        <div class="ksb-panel-toolbar">
+            <div id="ksb-selected-count">Selected: 0</div>
+            <div class="ksb-section-toggles">
+                <button
+                    class="ksb-section-toggle"
+                    type="button"
+                    data-ksb-toggle-section="groups"
+                    aria-label="Show subject groups"
+                    aria-expanded="false"
+                >
+                    Show Groups
+                </button>
+                <button
+                    class="ksb-section-toggle"
+                    type="button"
+                    data-ksb-toggle-section="selectedList"
+                    aria-label="Show selected classes list"
+                    aria-expanded="false"
+                >
+                    Show List
+                </button>
+            </div>
+            <label class="ksb-debug-toggle">
+                <input id="ksb-debug-toggle" type="checkbox">
+                Debug raw text
+            </label>
+        </div>
+        <div class="ksb-export-actions">
+            <button class="ksb-export-button" type="button" data-ksb-copy="classes" aria-label="Copy selected classes as plain text">Copy Classes</button>
+            <button class="ksb-export-button" type="button" data-ksb-copy="timetable" aria-label="Copy timetable summary as plain text">Copy Timetable</button>
+            <button class="ksb-export-button" type="button" data-ksb-copy="groups" aria-label="Copy subject groups as plain text">Copy Groups</button>
+            <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
+        </div>
+        <div id="ksb-timetable"></div>
     </div>
-    <div class="ksb-export-actions">
-        <button class="ksb-export-button" type="button" data-ksb-copy="classes">Copy Classes</button>
-        <button class="ksb-export-button" type="button" data-ksb-copy="timetable">Copy Timetable</button>
-        <button class="ksb-export-button" type="button" data-ksb-copy="groups">Copy Groups</button>
-        <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
-    </div>
-    <div id="ksb-timetable"></div>
 	`;
 
     document.body.appendChild(panel);
@@ -129,6 +166,18 @@ function injectExtensionUi() {
 
     panel.addEventListener("click", async (event) => {
         if (!(event.target instanceof Element)) return;
+
+        const panelToggle = event.target.closest("[data-ksb-toggle-panel]");
+        if (panelToggle instanceof HTMLElement) {
+            togglePanelCollapsed();
+            return;
+        }
+
+        const sectionToggle = event.target.closest("[data-ksb-toggle-section]");
+        if (sectionToggle instanceof HTMLElement) {
+            await togglePanelSection(sectionToggle.dataset.ksbToggleSection);
+            return;
+        }
 
         const copyButton = event.target.closest("[data-ksb-copy]");
         if (copyButton instanceof HTMLElement) {
@@ -147,9 +196,12 @@ function injectExtensionUi() {
         if (event.target.id !== "ksb-debug-toggle") return;
 
         showRawTextDebug = event.target.checked;
+        if (showRawTextDebug) showSelectedList = true;
         await renderTimetable();
     });
 
+    updatePanelCollapsedState();
+    updateSectionToggleButtons();
     renderTimetable();
 }
 
@@ -670,18 +722,79 @@ async function renderTimetable() {
     await renderSelectedSubjectPanel();
 }
 
+function togglePanelCollapsed() {
+    isPanelCollapsed = !isPanelCollapsed;
+    updatePanelCollapsedState();
+}
+
+async function togglePanelSection(sectionName) {
+    if (sectionName === "groups") {
+        showSubjectGroups = !showSubjectGroups;
+    }
+
+    if (sectionName === "selectedList") {
+        showSelectedList = !showSelectedList;
+    }
+
+    updateSectionToggleButtons();
+    await renderTimetable();
+}
+
+function updatePanelCollapsedState() {
+    const panel = document.querySelector("#kmitl-schedule-builder-panel");
+    const collapseButton = document.querySelector("#ksb-collapse-button");
+    if (!panel || !collapseButton) return;
+
+    panel.classList.toggle("ksb-panel--collapsed", isPanelCollapsed);
+    collapseButton.textContent = isPanelCollapsed ? "Show" : "Hide";
+    collapseButton.setAttribute(
+        "aria-label",
+        isPanelCollapsed
+            ? "Show KMITL Schedule Builder panel"
+            : "Hide KMITL Schedule Builder panel"
+    );
+    collapseButton.setAttribute("aria-expanded", String(!isPanelCollapsed));
+}
+
+function updateSectionToggleButtons() {
+    updateSectionToggleButton("groups", "Groups", showSubjectGroups);
+    updateSectionToggleButton("selectedList", "List", showSelectedList);
+}
+
+function updateSectionToggleButton(sectionName, label, isVisible) {
+    const button = document.querySelector(`[data-ksb-toggle-section="${sectionName}"]`);
+    if (!button) return;
+
+    button.textContent = `${isVisible ? "Hide" : "Show"} ${label}`;
+    button.setAttribute("aria-expanded", String(isVisible));
+    button.setAttribute(
+        "aria-label",
+        `${isVisible ? "Hide" : "Show"} ${label.toLowerCase()} section`
+    );
+}
+
+function updateSelectedCountDisplay(selectedCount) {
+    const countText = `Selected: ${selectedCount}`;
+    const countElement = document.querySelector("#ksb-selected-count");
+    const compactCountElement = document.querySelector("#ksb-selected-count-compact");
+
+    if (countElement) countElement.textContent = countText;
+    if (compactCountElement) compactCountElement.textContent = countText;
+}
+
 async function renderSelectedSubjectPanel() {
     const selectedSubjects = await getSelectedSubjects();
     latestSelectedSubjects = selectedSubjects;
 
-    const countElement = document.querySelector("#ksb-selected-count");
     const timetableElement = document.querySelector("#ksb-timetable");
     const debugToggle = document.querySelector("#ksb-debug-toggle");
 
-    if (!countElement || !timetableElement) return;
+    if (!timetableElement) return;
 
     syncAllVisibleCheckboxes(selectedSubjects);
-    countElement.textContent = `Selected: ${selectedSubjects.length}`;
+    updateSelectedCountDisplay(selectedSubjects.length);
+    updatePanelCollapsedState();
+    updateSectionToggleButtons();
     if (debugToggle) debugToggle.checked = showRawTextDebug;
 
     if (selectedSubjects.length === 0) {
@@ -696,10 +809,10 @@ async function renderSelectedSubjectPanel() {
     timetableElement.innerHTML = `
         ${renderConflictWarnings(conflicts)}
         ${renderDuplicateSelectionWarnings(duplicateSelections)}
-        ${renderSubjectGroupSummary(selectedSubjects)}
+        ${showSubjectGroups ? renderSubjectGroupSummary(selectedSubjects) : ""}
         ${renderTimetableGrid(selectedSubjects, conflictingSubjectIds)}
         ${renderUnplaceableSubjects(selectedSubjects)}
-        ${renderSelectedSubjectList(selectedSubjects, conflictingSubjectIds)}
+        ${showSelectedList ? renderSelectedSubjectList(selectedSubjects, conflictingSubjectIds) : ""}
     `;
 }
 
