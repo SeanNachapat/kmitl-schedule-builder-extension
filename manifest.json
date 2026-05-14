@@ -1,0 +1,15 @@
+{
+	"manifest_version": 3,
+	"name": "KMITL Schedule Builder",
+	"version": "0.1.0",
+	"description": "Unofficial timetable builder for KMITL registration class data.",
+	"permissions": ["storage"],
+	"content_scripts": [
+		{
+			"matches": ["https://regis.reg.kmitl.ac.th/*"],
+			"js": ["src/content.js"],
+			"css": ["src/style.css"],
+			"run_at": "document_idle"
+		}
+	]
+}
