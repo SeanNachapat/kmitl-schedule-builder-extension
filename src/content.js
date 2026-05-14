@@ -676,9 +676,12 @@ async function renderSelectedSubjectPanel() {
 
     const conflicts = getSubjectConflicts(selectedSubjects);
     const conflictingSubjectIds = getConflictingSubjectIds(conflicts);
+    const duplicateSelections = getDuplicateSubjectSelections(selectedSubjects);
 
     timetableElement.innerHTML = `
         ${renderConflictWarnings(conflicts)}
+        ${renderDuplicateSelectionWarnings(duplicateSelections)}
+        ${renderSubjectGroupSummary(selectedSubjects)}
         ${renderTimetableGrid(selectedSubjects, conflictingSubjectIds)}
         ${renderUnplaceableSubjects(selectedSubjects)}
         ${renderSelectedSubjectList(selectedSubjects, conflictingSubjectIds)}
@@ -802,6 +805,210 @@ function renderConflictItem(conflict) {
     <div class="ksb-conflict-item">
         <strong>${escapeHtml(conflict.day)} ${escapeHtml(conflict.startTime)} - ${escapeHtml(conflict.endTime)}</strong>
         <span>${subjectDetails.map(escapeHtml).join(" vs ")}</span>
+    </div>
+    `;
+}
+
+function getSubjectGroupKey(subject) {
+    const subjectCode = normalizeSubjectIdPart(getSubjectDisplayCode(subject));
+    if (subjectCode) return subjectCode;
+
+    const rawSubjectName = normalizeWhitespace(subject.subjectName || subject.name || "");
+    const subjectName = normalizeSubjectIdPart(rawSubjectName);
+    return subjectName || "";
+}
+
+function groupSubjectsByCode(subjects) {
+    const groups = new Map();
+
+    subjects.forEach((subject) => {
+        const groupKey = getSubjectGroupKey(subject);
+        if (!groupKey) return;
+
+        if (!groups.has(groupKey)) {
+            groups.set(groupKey, []);
+        }
+
+        groups.get(groupKey).push(subject);
+    });
+
+    return groups;
+}
+
+function getSubjectGroupSummary(subjects) {
+    return [...groupSubjectsByCode(subjects).entries()]
+        .map(([groupKey, groupSubjects]) => ({
+            groupKey,
+            subjects: groupSubjects,
+            classTypes: getSelectedClassTypesForGroup(groupSubjects),
+        }))
+        .sort((a, b) => {
+            const firstLabel = getSubjectDisplayCode(a.subjects[0]) || getSubjectDisplayName(a.subjects[0]);
+            const secondLabel = getSubjectDisplayCode(b.subjects[0]) || getSubjectDisplayName(b.subjects[0]);
+            return firstLabel.localeCompare(secondLabel);
+        });
+}
+
+function getSelectedClassTypesForGroup(groupSubjects) {
+    return [...new Set(groupSubjects.map(normalizeSubjectClassTypeKey))];
+}
+
+function getDuplicateSubjectSelections(subjects) {
+    const duplicates = [];
+
+    groupSubjectsByCode(subjects).forEach((groupSubjects) => {
+        const subjectsByClassType = new Map();
+
+        groupSubjects.forEach((subject) => {
+            const classType = normalizeSubjectClassTypeKey(subject);
+            if (!subjectsByClassType.has(classType)) {
+                subjectsByClassType.set(classType, []);
+            }
+
+            subjectsByClassType.get(classType).push(subject);
+        });
+
+        subjectsByClassType.forEach((sameTypeSubjects, classType) => {
+            if (sameTypeSubjects.length < 2) return;
+            if (!hasDuplicateSelectionDifference(sameTypeSubjects)) return;
+
+            duplicates.push({
+                id: [
+                    getSubjectGroupKey(sameTypeSubjects[0]),
+                    classType,
+                    ...sameTypeSubjects.map((subject) => subject.id || ""),
+                ].join("|"),
+                classType,
+                subjects: sameTypeSubjects,
+            });
+        });
+    });
+
+    return duplicates;
+}
+
+function hasDuplicateSelectionDifference(subjects) {
+    const signatures = new Set(
+        subjects.map((subject) => {
+            return [
+                normalizeSubjectIdPart(subject.section),
+                normalizeSubjectIdPart(getSubjectStartTime(subject)),
+                normalizeSubjectIdPart(getSubjectEndTime(subject)),
+            ].join("|");
+        })
+    );
+
+    return signatures.size > 1;
+}
+
+function normalizeSubjectClassTypeKey(subject) {
+    const classType = subject.classType || subject.type || "unknown";
+    const labels = {
+        theory: "theory",
+        practical: "practical",
+        seminar: "seminar",
+        "ทฤษฎี": "theory",
+        "ปฏิบัติ": "practical",
+        "สัมมนา": "seminar",
+        unknown: "unknown",
+    };
+
+    return labels[classType] || "unknown";
+}
+
+function renderSubjectGroupSummary(subjects) {
+    const groupSummaries = getSubjectGroupSummary(subjects);
+    if (groupSummaries.length === 0) return "";
+
+    return `
+    <div class="ksb-subject-group-summary">
+        <div class="ksb-subject-group-title">Subject groups</div>
+        ${groupSummaries.map(renderSubjectGroup).join("")}
+    </div>
+    `;
+}
+
+function renderSubjectGroup(groupSummary) {
+    const representativeSubject = groupSummary.subjects[0];
+    const subjectCode = getSubjectDisplayCode(representativeSubject);
+    const subjectName = getSubjectDisplayName(representativeSubject);
+    const groupHints = getSubjectGroupHints(groupSummary);
+
+    return `
+    <div class="ksb-subject-group">
+        <div class="ksb-subject-group-header">
+            <strong>${escapeHtml(subjectCode || subjectName)}</strong>
+            ${subjectCode ? `<span>${escapeHtml(subjectName)}</span>` : ""}
+            <em>${escapeHtml(String(groupSummary.subjects.length))} selected component${groupSummary.subjects.length === 1 ? "" : "s"}</em>
+        </div>
+        <div class="ksb-subject-group-components">
+            ${groupSummary.subjects.map(renderSubjectGroupComponent).join("")}
+        </div>
+        ${groupHints.map((hint) => `<div class="ksb-subject-group-hint">${escapeHtml(hint)}</div>`).join("")}
+    </div>
+    `;
+}
+
+function renderSubjectGroupComponent(subject) {
+    const details = [
+        getSubjectDisplayClassType(subject),
+        subject.section ? `section(${subject.section})` : "",
+        getSubjectDisplayDay(subject),
+        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+    ].filter(Boolean);
+
+    return `<div class="ksb-subject-group-component">${details.map(escapeHtml).join(" | ")}</div>`;
+}
+
+function getSubjectGroupHints(groupSummary) {
+    const selectedClassTypes = new Set(groupSummary.classTypes);
+    const hints = [];
+
+    if (selectedClassTypes.has("practical") && !selectedClassTypes.has("theory")) {
+        hints.push("Practical selected without theory. Check whether this subject also requires a theory section.");
+    }
+
+    if (
+        selectedClassTypes.has("theory") &&
+        !selectedClassTypes.has("practical") &&
+        !selectedClassTypes.has("seminar")
+    ) {
+        hints.push("Theory selected. If this subject has practical/seminar rows, select those too if required.");
+    }
+
+    if (selectedClassTypes.has("practical")) {
+        hints.push("Practical section mapping may depend on department rules. Verify before finalizing.");
+    }
+
+    return hints;
+}
+
+function renderDuplicateSelectionWarnings(duplicates) {
+    if (duplicates.length === 0) return "";
+
+    return `
+    <div class="ksb-duplicate-warning">
+        <div class="ksb-duplicate-title">Duplicate or alternative selections</div>
+        ${duplicates.map(renderDuplicateSelectionItem).join("")}
+    </div>
+    `;
+}
+
+function renderDuplicateSelectionItem(duplicate) {
+    const representativeSubject = duplicate.subjects[0];
+    const duplicateDetails = duplicate.subjects.map((subject) => {
+        return [
+            subject.section ? `section(${subject.section})` : "",
+            getSubjectDisplayDay(subject),
+            [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        ].filter(Boolean).join(" | ");
+    });
+
+    return `
+    <div class="ksb-duplicate-item">
+        <strong>${escapeHtml(getSubjectDisplayCode(representativeSubject) || getSubjectDisplayName(representativeSubject))}</strong>
+        <span>You selected multiple ${escapeHtml(getSubjectDisplayClassType(representativeSubject))} sections for the same subject. This may be intentional, but usually you only need one.</span>
+        <em>${duplicateDetails.map(escapeHtml).join(" vs ")}</em>
     </div>
     `;
 }
