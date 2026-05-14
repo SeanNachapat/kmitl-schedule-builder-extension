@@ -23,7 +23,7 @@
     position: fixed;
     right: 20px;
     bottom: 20px;
-    width: 420px;
+    width: min(900px, calc(100vw - 40px));
     max-height: 70vh;
     overflow: auto;
     padding: 12px;
@@ -93,6 +93,163 @@
     color: #94a3b8;
     font-size: 13px;
     text-align: center;
+}
+
+.ksb-timetable-section {
+    margin-bottom: 12px;
+}
+
+.ksb-timetable-scroll {
+    overflow-x: auto;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #020617;
+}
+
+.ksb-timetable-grid {
+    min-width: 960px;
+}
+
+.ksb-timetable-header,
+.ksb-timetable-row {
+    display: grid;
+    grid-template-columns: 54px repeat(26, 34px);
+}
+
+.ksb-timetable-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    min-height: 28px;
+    border-bottom: 1px solid #334155;
+    background: #111827;
+}
+
+.ksb-timetable-corner,
+.ksb-timetable-hour,
+.ksb-timetable-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.ksb-timetable-corner {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 1px solid #334155;
+    color: #fb923c;
+}
+
+.ksb-timetable-hour {
+    grid-row: 1;
+    border-left: 1px solid #334155;
+}
+
+.ksb-timetable-row {
+    position: relative;
+    min-height: 78px;
+    border-bottom: 1px solid #1e293b;
+}
+
+.ksb-timetable-row:last-child {
+    border-bottom: 0;
+}
+
+.ksb-timetable-day {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 1px solid #334155;
+    background: #0f172a;
+    color: #fb923c;
+}
+
+.ksb-timetable-cell {
+    grid-row: 1;
+    min-height: 78px;
+    border-left: 1px solid #1e293b;
+    background: #0f172a;
+}
+
+.ksb-timetable-cell:nth-child(odd) {
+    background: #111827;
+}
+
+.ksb-timetable-block {
+    grid-row: 1;
+    z-index: 1;
+    align-self: stretch;
+    min-width: 0;
+    margin: 5px 3px;
+    padding: 6px;
+    border: 1px solid #f97316;
+    border-left: 3px solid #fb923c;
+    border-radius: 6px;
+    background: #7c2d12;
+    color: #fff7ed;
+    overflow: hidden;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+.ksb-timetable-block-name {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #ffedd5;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.ksb-timetable-block-meta,
+.ksb-timetable-block-time,
+.ksb-timetable-block-location {
+    overflow: hidden;
+    color: #fed7aa;
+    font-size: 10px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ksb-unplaceable-subjects {
+    margin-bottom: 12px;
+    padding: 8px;
+    border: 1px dashed #f97316;
+    border-radius: 8px;
+    background: #1e293b;
+}
+
+.ksb-unplaceable-title,
+.ksb-selected-list-title {
+    margin-bottom: 6px;
+    color: #fb923c;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ksb-unplaceable-subject {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #cbd5e1;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.ksb-unplaceable-subject + .ksb-unplaceable-subject {
+    margin-top: 6px;
+}
+
+.ksb-unplaceable-subject span {
+    color: #94a3b8;
+}
+
+.ksb-selected-subject-list {
+    margin-top: 10px;
 }
 
 .ksb-selected-subject {

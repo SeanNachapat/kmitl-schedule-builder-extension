@@ -49,6 +49,20 @@ const DAY_KEY_MAP = {
     sun: "Sun",
     sunday: "Sun",
 };
+const TIMETABLE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const TIMETABLE_DAY_LABELS = {
+    Mon: "Mon",
+    Tue: "Tue",
+    Wed: "Wed",
+    Thu: "Thu",
+    Fri: "Fri",
+    Sat: "Sat",
+    Sun: "Sun",
+};
+const TIMETABLE_START_MINUTE = 8 * 60;
+const TIMETABLE_END_MINUTE = 21 * 60;
+const TIMETABLE_SLOT_MINUTES = 30;
+const TIMETABLE_FIRST_SLOT_COLUMN = 2;
 let pageScanScheduled = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
@@ -655,7 +669,16 @@ async function renderSelectedSubjectPanel() {
     countElement.textContent = `Selected: ${selectedSubjects.length}`;
     if (debugToggle) debugToggle.checked = showRawTextDebug;
 
-    timetableElement.innerHTML = renderSelectedSubjectList(selectedSubjects);
+    if (selectedSubjects.length === 0) {
+        timetableElement.innerHTML = renderSelectedSubjectList(selectedSubjects);
+        return;
+    }
+
+    timetableElement.innerHTML = `
+        ${renderTimetableGrid(selectedSubjects)}
+        ${renderUnplaceableSubjects(selectedSubjects)}
+        ${renderSelectedSubjectList(selectedSubjects)}
+    `;
 }
 
 function renderSelectedSubjectList(subjects) {
@@ -667,7 +690,189 @@ function renderSelectedSubjectList(subjects) {
         `;
     }
 
-    return subjects.map(renderSelectedSubjectCard).join("");
+    return `
+    <div class="ksb-selected-subject-list">
+        <div class="ksb-selected-list-title">Selected classes</div>
+        ${subjects.map(renderSelectedSubjectCard).join("")}
+    </div>
+    `;
+}
+
+function renderTimetableGrid(subjects) {
+    const placeableSubjects = getPlaceableSubjects(subjects);
+
+    return `
+    <div class="ksb-timetable-section">
+        <div class="ksb-timetable-scroll">
+            <div class="ksb-timetable-grid">
+                ${renderTimetableHeaderSlots()}
+                ${renderTimetableDayRows(placeableSubjects)}
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+function renderTimetableHeaderSlots() {
+    return `
+    <div class="ksb-timetable-header">
+        <div class="ksb-timetable-corner">Day</div>
+        ${getTimetableSlots()
+            .filter((slot) => slot.minutes % 60 === 0)
+            .map((slot) => {
+                return `<div class="ksb-timetable-hour" style="grid-column: ${slot.columnStart} / span 2;">${escapeHtml(slot.label)}</div>`;
+            })
+            .join("")}
+    </div>
+    `;
+}
+
+function renderTimetableDayRows(subjects) {
+    return TIMETABLE_DAYS.map((day) => {
+        const daySubjects = subjects.filter((subject) => {
+            return getSubjectGridPlacement(subject).day === day;
+        });
+
+        return `
+        <div class="ksb-timetable-row">
+            <div class="ksb-timetable-day">${escapeHtml(TIMETABLE_DAY_LABELS[day])}</div>
+            ${getTimetableSlots().map(renderTimetableCell).join("")}
+            ${daySubjects.map(renderTimetableSubjectBlock).join("")}
+        </div>
+        `;
+    }).join("");
+}
+
+function renderTimetableCell(slot) {
+    return `<div class="ksb-timetable-cell" style="grid-column: ${slot.columnStart};"></div>`;
+}
+
+function renderTimetableSubjectBlock(subject) {
+    const placement = getSubjectGridPlacement(subject);
+    const location = getSubjectDisplayLocation(subject);
+
+    return `
+    <div
+        class="ksb-timetable-block"
+        style="grid-column: ${placement.columnStart} / span ${placement.columnSpan};"
+        title="${escapeHtml(getSubjectDisplayName(subject))}"
+    >
+        <div class="ksb-timetable-block-name">${escapeHtml(getSubjectDisplayName(subject))}</div>
+        <div class="ksb-timetable-block-meta">
+            ${escapeHtml(getSubjectDisplayClassType(subject))}
+            ${subject.section ? ` | section(${escapeHtml(subject.section)})` : ""}
+        </div>
+        <div class="ksb-timetable-block-time">
+            ${escapeHtml(getSubjectStartTime(subject))} - ${escapeHtml(getSubjectEndTime(subject))}
+        </div>
+        ${location ? `<div class="ksb-timetable-block-location">${escapeHtml(location)}</div>` : ""}
+    </div>
+    `;
+}
+
+function renderUnplaceableSubjects(subjects) {
+    const unplaceableSubjects = getUnplaceableSubjects(subjects);
+    if (unplaceableSubjects.length === 0) return "";
+
+    return `
+    <div class="ksb-unplaceable-subjects">
+        <div class="ksb-unplaceable-title">Cannot place on timetable</div>
+        ${unplaceableSubjects.map(renderUnplaceableSubject).join("")}
+    </div>
+    `;
+}
+
+function renderUnplaceableSubject(subject) {
+    const details = [
+        getSubjectDisplayDay(subject),
+        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        subject.section ? `section(${subject.section})` : "",
+    ].filter(Boolean);
+
+    return `
+    <div class="ksb-unplaceable-subject">
+        <strong>${escapeHtml(getSubjectDisplayName(subject))}</strong>
+        ${details.length ? `<span>${details.map(escapeHtml).join(" | ")}</span>` : ""}
+    </div>
+    `;
+}
+
+function getTimetableSlots() {
+    const slots = [];
+
+    for (
+        let minutes = TIMETABLE_START_MINUTE;
+        minutes < TIMETABLE_END_MINUTE;
+        minutes += TIMETABLE_SLOT_MINUTES
+    ) {
+        slots.push({
+            minutes,
+            label: minutesToTimeLabel(minutes),
+            columnStart:
+                TIMETABLE_FIRST_SLOT_COLUMN +
+                (minutes - TIMETABLE_START_MINUTE) / TIMETABLE_SLOT_MINUTES,
+        });
+    }
+
+    return slots;
+}
+
+function getPlaceableSubjects(subjects) {
+    return subjects.filter(isSubjectPlaceable);
+}
+
+function getUnplaceableSubjects(subjects) {
+    return subjects.filter((subject) => !isSubjectPlaceable(subject));
+}
+
+function isSubjectPlaceable(subject) {
+    return getSubjectGridPlacement(subject).canPlace;
+}
+
+function getSubjectGridPlacement(subject) {
+    const day = normalizeDayKey(subject.day || subject.dayText);
+    const startMinutes = timeToMinutes(getSubjectStartTime(subject));
+    const endMinutes = timeToMinutes(getSubjectEndTime(subject));
+
+    if (
+        !TIMETABLE_DAYS.includes(day) ||
+        startMinutes === null ||
+        endMinutes === null ||
+        endMinutes <= startMinutes ||
+        startMinutes < TIMETABLE_START_MINUTE ||
+        endMinutes > TIMETABLE_END_MINUTE ||
+        (startMinutes - TIMETABLE_START_MINUTE) % TIMETABLE_SLOT_MINUTES !== 0 ||
+        (endMinutes - startMinutes) % TIMETABLE_SLOT_MINUTES !== 0
+    ) {
+        return { canPlace: false };
+    }
+
+    return {
+        canPlace: true,
+        day,
+        columnStart:
+            TIMETABLE_FIRST_SLOT_COLUMN +
+            (startMinutes - TIMETABLE_START_MINUTE) / TIMETABLE_SLOT_MINUTES,
+        columnSpan: (endMinutes - startMinutes) / TIMETABLE_SLOT_MINUTES,
+    };
+}
+
+function timeToMinutes(value) {
+    const timeMatch = normalizeWhitespace(value).match(/^(\d{1,2}):(\d{2})$/);
+    if (!timeMatch) return null;
+
+    const hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    if (hours > 23 || minutes > 59) return null;
+
+    return hours * 60 + minutes;
+}
+
+function minutesToTimeLabel(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const minutePart = minutes % 60;
+
+    return `${String(hours).padStart(2, "0")}:${String(minutePart).padStart(2, "0")}`;
 }
 
 function renderSelectedSubjectCard(subject) {
