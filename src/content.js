@@ -807,8 +807,11 @@ function togglePanelCollapsed() {
 }
 
 function openScheduleBuilderModal() {
-    if (DEBUG_UI) console.debug("[KSB] openScheduleBuilderModal() called");
+    debugUi("openScheduleBuilderModal() called");
+    ensureModalShell();
+    updateModalSidebarOffset();
     setScheduleBuilderExpanded(true);
+    renderTimetable();
 }
 
 function closeScheduleBuilderModal() {
@@ -973,15 +976,16 @@ function updateSidebarLauncherPosition() {
     const sidebarRect = getSidebarRect();
     const launcherLeft = sidebarRect.left + 12;
     const launcherWidth = Math.max(220, sidebarRect.width - 24);
+    const launcherTop = Math.max(96, sidebarRect.top + 420);
 
     launcher.style.setProperty("--ksb-launcher-left", `${launcherLeft}px`);
     launcher.style.setProperty("--ksb-launcher-width", `${launcherWidth}px`);
-    launcher.style.setProperty("--ksb-launcher-bottom", `${sidebarRect.bottom}px`);
+    launcher.style.setProperty("--ksb-launcher-top", `${launcherTop}px`);
 
     if (DEBUG_UI) {
         console.debug(
             "[KSB] Launcher position updated:",
-            { launcherLeft, launcherWidth, bottom: sidebarRect.bottom }
+            { launcherLeft, launcherWidth, launcherTop }
         );
     }
 }
@@ -1025,7 +1029,7 @@ function handleSidebarLauncherClick(event) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        if (DEBUG_UI) console.debug("[KSB] Show button clicked (delegated)");
+        debugUi("Show button clicked (delegated)");
         openScheduleBuilderModal();
         return;
     }
@@ -1043,10 +1047,10 @@ function renderSidebarLauncher(selectedCount) {
         <button
             class="ksb-sidebar-launcher-button"
             type="button"
-            data-ksb-open-modal
+            data-ksb-open-modal="true"
             aria-label="Show KMITL Schedule Builder"
         >
-            Show
+            <span class="ksb-sidebar-launcher-button-text">Show</span>
         </button>
     `;
 
@@ -1058,7 +1062,8 @@ function renderSidebarLauncher(selectedCount) {
 
 function bindSidebarLauncherButton(launcher) {
     const button = launcher.querySelector("[data-ksb-open-modal]");
-    if (!button || button.dataset.ksbOpenBound === "true") return;
+    if (!(button instanceof HTMLButtonElement)) return;
+    if (button.dataset.ksbOpenBound === "true") return;
 
     button.addEventListener(
         "click",
@@ -1066,13 +1071,18 @@ function bindSidebarLauncherButton(launcher) {
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
-            if (DEBUG_UI) console.debug("[KSB] Show button clicked (direct)");
+            debugUi("Show button clicked (direct)");
             openScheduleBuilderModal();
         },
         true
     );
 
     button.dataset.ksbOpenBound = "true";
+}
+
+function debugUi(message, data) {
+    if (!DEBUG_UI) return;
+    console.debug("[KSB UI]", message, data || "");
 }
 
 function removeSidebarLauncher() {
