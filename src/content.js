@@ -213,6 +213,7 @@ function ensureModalShell() {
             <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">${ksbRenderIcon("selected")} Selected: 0</span>
         </div>
 		<div class="ksb-panel-actions">
+            <div id="ksb-modal-error-badge"></div>
 			<button id="ksb-render-button" type="button">${ksbRenderIcon("refresh")} Refresh</button>
 			<button id="ksb-clear-button" type="button">${ksbRenderIcon("clear")} Clear</button>
             <button
@@ -251,10 +252,17 @@ function ensureModalShell() {
         </div>
         <div class="ksb-export-actions">
             <button class="ksb-export-button" type="button" data-ksb-action="copy-reg-codes" title="Copy codes for registration page">${ksbRenderIcon("register")} Copy codes</button>
-            <button class="ksb-export-button" type="button" data-ksb-action="export-gcal">${ksbRenderIcon("calendar")} GCal</button>
-            <button class="ksb-export-button" type="button" data-ksb-action="export-ics">${ksbRenderIcon("download")} iCal</button>
-            <button class="ksb-export-button" type="button" data-ksb-action="copy-share-link">${ksbRenderIcon("share")} Share Link</button>
-            ${ksbRenderDarkModeToggle()}
+            <div class="ksb-dropdown">
+                <button class="ksb-export-button ksb-dropdown-toggle" type="button">
+                    ${ksbRenderIcon("share")} Export / Share ${ksbRenderIcon("chevron-down")}
+                </button>
+                <div class="ksb-dropdown-menu">
+                    <button class="ksb-dropdown-item" type="button" data-ksb-action="export-gcal">${ksbRenderIcon("calendar")} Google Calendar</button>
+                    <button class="ksb-dropdown-item" type="button" data-ksb-action="export-ics">${ksbRenderIcon("download")} iCal File (.ics)</button>
+                    <button class="ksb-dropdown-item" type="button" data-ksb-action="copy-share-link">${ksbRenderIcon("share")} Copy Share Link</button>
+                    <button class="ksb-dropdown-item" type="button" data-ksb-action="download-png">${ksbRenderIcon("image")} Download Image</button>
+                </div>
+            </div>
             <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
         </div>
         <div id="ksb-semester-picker-container"></div>
@@ -274,6 +282,10 @@ function ensureModalShell() {
     document
         .querySelector("#ksb-clear-button")
         .addEventListener("click", clearSelectedSubjects);
+
+    document
+        .querySelector("#ksb-collapse-button")
+        .addEventListener("click", closeScheduleBuilderModal);
 
     overlay.addEventListener("click", handleBackdropClick);
 
@@ -309,6 +321,34 @@ function ensureModalShell() {
         const sectionToggle = event.target.closest("[data-ksb-toggle-section]");
         if (sectionToggle instanceof HTMLElement) {
             await togglePanelSection(sectionToggle.dataset.ksbToggleSection);
+            return;
+        }
+
+        const ksbActionBtn = event.target.closest("[data-ksb-action]");
+        if (ksbActionBtn instanceof HTMLElement) {
+            const action = ksbActionBtn.dataset.ksbAction;
+            const subjects = await getSelectedSubjects();
+            
+            if (action === "copy-reg-codes") {
+                await handleCopyAction("codes");
+            } else if (action === "export-gcal") {
+                const res = await ksbExportToGoogleCalendar(subjects);
+                if (res.error) alert(res.error);
+                else setCopyStatus(`Opened ${res.count} calendar tabs`);
+            } else if (action === "export-ics") {
+                await ksbExportToIcal(subjects);
+                setCopyStatus("iCal file downloaded");
+            } else if (action === "copy-share-link") {
+                const link = ksbEncodeShareLink(subjects);
+                if (link) {
+                    await ksbCopyToClipboard(link);
+                    setCopyStatus("Share link copied to clipboard!");
+                } else {
+                    setCopyStatus("Failed to generate link");
+                }
+            } else if (action === "download-png") {
+                await handleDownloadPngAction();
+            }
             return;
         }
 
@@ -1162,8 +1202,13 @@ function renderSidebarLauncher(selectedCount) {
     const launcher = document.querySelector("#kmitl-schedule-builder-launcher");
     if (!launcher) return;
 
+    const subjects = latestSelectedSubjects;
+    const conflicts = getSubjectConflicts(subjects);
+    const duplicateSelections = getDuplicateSubjectSelections(subjects);
+    const totalErrors = conflicts.length + duplicateSelections.length;
+
     const isOpen = isScheduleBuilderExpanded();
-    const launcherStateKey = `${selectedCount}:${isOpen ? "open" : "closed"}`;
+    const launcherStateKey = `${selectedCount}:${totalErrors}:${isOpen ? "open" : "closed"}`;
     if (launcher.dataset.ksbRenderState === launcherStateKey) {
         return;
     }
@@ -1176,10 +1221,17 @@ function renderSidebarLauncher(selectedCount) {
         ? "Close KMITL Schedule Builder"
         : "Show KMITL Schedule Builder";
 
+    const errorBadge = totalErrors > 0 
+        ? `<div class="ksb-sidebar-launcher-error-badge" title="${totalErrors} conflicts/duplicates detected">
+            ${ksbRenderIcon("warning")} ${totalErrors}
+          </div>`
+        : "";
+
     const launcherHtml = `
         <div class="ksb-sidebar-launcher-title">
             ${ksbRenderIcon("calendar")} Schedule Builder
             <span class="ksb-attribution">Made by twtae & His beloved AI</span>
+            ${errorBadge}
         </div>
         <div class="ksb-sidebar-launcher-count">${ksbRenderIcon("selected")} Selected: ${ksbEscapeHtml(selectedCount)}</div>
         <button
@@ -1245,18 +1297,38 @@ async function renderSelectedSubjectPanel() {
     // Update semester picker
     const semStart = await ksbGetSemesterStart();
     const semContainer = document.querySelector("#ksb-semester-picker-container");
-    if (semContainer) semContainer.innerHTML = ksbRenderSemesterDatePicker(semStart);
+    if (semContainer) {
+        const currentInput = semContainer.querySelector("#ksb-semester-start-input");
+        // Only update if the input is not currently focused (to avoid losing cursor/focus while typing)
+        if (!currentInput || document.activeElement !== currentInput) {
+            semContainer.innerHTML = ksbRenderSemesterDatePicker(semStart);
+        }
+    }
 
     // Offline banner
     const offlineContainer = document.querySelector("#ksb-offline-banner-container");
     if (offlineContainer) offlineContainer.innerHTML = ksbRenderOfflineBanner();
+
+    const duplicateSubjectIds = new Set();
+    duplicateSelections.forEach(group => group.subjects.forEach(s => duplicateSubjectIds.add(s.id)));
+
+    // Update modal error badge
+    const modalErrorContainer = document.querySelector("#ksb-modal-error-badge");
+    if (modalErrorContainer) {
+        const totalErrors = conflicts.length + duplicateSelections.length;
+        modalErrorContainer.innerHTML = totalErrors > 0 
+            ? `<div class="ksb-modal-error-badge" title="${totalErrors} conflicts/duplicates detected">
+                ${ksbRenderIcon("warning")} ${totalErrors} Errors
+               </div>`
+            : "";
+    }
 
     timetableElement.innerHTML = `
         ${renderConflictWarnings(conflicts, selectedSubjects)}
         ${renderDuplicateSelectionWarnings(duplicateSelections)}
         ${ksbRenderCategoryLegend()}
         ${showSubjectGroups ? renderSubjectGroupSummary(selectedSubjects) : ""}
-        ${renderTimetableGrid(selectedSubjects, conflictingSubjectIds)}
+        ${renderTimetableGrid(selectedSubjects, conflictingSubjectIds, duplicateSubjectIds)}
         ${renderUnplaceableSubjects(selectedSubjects)}
         ${showSelectedList ? renderSelectedSubjectList(selectedSubjects, conflictingSubjectIds) : ""}
     `;
@@ -1265,11 +1337,26 @@ async function renderSelectedSubjectPanel() {
     ksbSaveOfflineCache(selectedSubjects);
 }
 
+
+async function handleGCalExport() {
+    const subjects = latestSelectedSubjects;
+    const res = await ksbExportToGoogleCalendar(subjects);
+    if (res.error) alert(res.error);
+    else setCopyStatus(`Opened ${res.count} tabs`);
+}
+
+async function handleIcalExport() {
+    const subjects = latestSelectedSubjects;
+    const res = await ksbExportToIcal(subjects);
+    if (res.error) alert(res.error);
+    else setCopyStatus("iCal downloaded");
+}
+
 async function handlePanelAction(action, button) {
     const subjects = latestSelectedSubjects;
     if (action === 'copy-reg-codes') {
         const codes = [...new Set(subjects.map(s => ksbGetSubjectDisplayCode(s)))].filter(Boolean).join('\n');
-        await ksbCopyTextToClipboard(codes);
+        await copyTextToClipboard(codes);
         setCopyStatus("Codes copied!");
     } else if (action === 'export-gcal') {
         const res = await ksbExportToGoogleCalendar(subjects);
@@ -1282,7 +1369,7 @@ async function handlePanelAction(action, button) {
     } else if (action === 'copy-share-link') {
         const link = ksbEncodeShareLink(subjects);
         if (link) {
-            await ksbCopyTextToClipboard(link);
+            await copyTextToClipboard(link);
             setCopyStatus("Share link copied!");
         }
     }
@@ -1314,7 +1401,7 @@ function renderSelectedSubjectList(subjects, conflictingSubjectIds = new Set()) 
     `;
 }
 
-function renderTimetableGrid(subjects, conflictingSubjectIds = new Set()) {
+function renderTimetableGrid(subjects, conflictingSubjectIds = new Set(), duplicateSubjectIds = new Set()) {
     const placeableSubjects = getPlaceableSubjects(subjects);
 
     return `
@@ -1322,7 +1409,7 @@ function renderTimetableGrid(subjects, conflictingSubjectIds = new Set()) {
         <div class="ksb-timetable-scroll">
             <div class="ksb-timetable-grid">
                 ${renderTimetableHeaderSlots()}
-                ${renderTimetableDayRows(placeableSubjects, conflictingSubjectIds)}
+                ${renderTimetableDayRows(placeableSubjects, conflictingSubjectIds, duplicateSubjectIds)}
             </div>
         </div>
     </div>
@@ -1343,7 +1430,7 @@ function renderTimetableHeaderSlots() {
     `;
 }
 
-function renderTimetableDayRows(subjects, conflictingSubjectIds = new Set()) {
+function renderTimetableDayRows(subjects, conflictingSubjectIds = new Set(), duplicateSubjectIds = new Set()) {
     return KSB_TIMETABLE_DAYS.map((day) => {
         const daySubjects = subjects.filter((subject) => {
             return getSubjectGridPlacement(subject).day === day;
@@ -1353,7 +1440,7 @@ function renderTimetableDayRows(subjects, conflictingSubjectIds = new Set()) {
         <div class="ksb-timetable-row">
             <div class="ksb-timetable-day">${ksbEscapeHtml(KSB_TIMETABLE_DAY_LABELS[day])}</div>
             ${getTimetableSlots().map(renderTimetableCell).join("")}
-            ${daySubjects.map((subject) => renderTimetableSubjectBlock(subject, conflictingSubjectIds)).join("")}
+            ${daySubjects.map((subject) => renderTimetableSubjectBlock(subject, conflictingSubjectIds, duplicateSubjectIds)).join("")}
         </div>
         `;
     }).join("");
@@ -1363,11 +1450,13 @@ function renderTimetableCell(slot) {
     return `<div class="ksb-timetable-cell" style="grid-column: ${slot.columnStart};"></div>`;
 }
 
-function renderTimetableSubjectBlock(subject, conflictingSubjectIds = new Set()) {
+function renderTimetableSubjectBlock(subject, conflictingSubjectIds = new Set(), duplicateSubjectIds = new Set()) {
     const placement = getSubjectGridPlacement(subject);
     const location = ksbGetSubjectDisplayLocation(subject);
     const catStyle = ksbGetCategoryStyle(ksbGetSubjectDisplayCode(subject));
-    const isConflict = isSubjectConflicting(subject, conflictingSubjectIds);
+    const isTimeConflict = isSubjectConflicting(subject, conflictingSubjectIds);
+    const isDuplicateConflict = duplicateSubjectIds.has(subject.id);
+    const isConflict = isTimeConflict || isDuplicateConflict;
     
     const style = `
         grid-column: ${placement.columnStart} / span ${placement.columnSpan};
@@ -1382,8 +1471,9 @@ function renderTimetableSubjectBlock(subject, conflictingSubjectIds = new Set())
     <div
         class="ksb-timetable-block${isConflict ? " ksb-timetable-block--conflict" : ""}"
         style="${style}"
-        title="${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}"
+        title="${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}${isConflict ? " (Conflict/Duplicate Selection)" : ""}"
     >
+        ${isConflict ? `<div class="ksb-timetable-block-conflict-icon" title="${isTimeConflict ? 'Time Overlap' : 'Duplicate Course Code'}">${ksbRenderIcon("warning")}</div>` : ""}
         <div class="ksb-timetable-block-name">${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}</div>
         <div class="ksb-timetable-block-meta">
             ${ksbEscapeHtml(ksbGetSubjectDisplayClassType(subject))}
@@ -1608,7 +1698,7 @@ function renderDuplicateSelectionWarnings(duplicates) {
 
     return `
     <div class="ksb-duplicate-warning">
-        <div class="ksb-duplicate-title">${ksbRenderIcon("info")} Duplicate or alternative selections</div>
+        <div class="ksb-duplicate-title">${ksbRenderIcon("warning")} Multiple sections of same course</div>
         ${duplicates.map(renderDuplicateSelectionItem).join("")}
     </div>
     `;

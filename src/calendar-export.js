@@ -4,9 +4,52 @@
  * Google Calendar pre-filled URLs and iCal/ICS file export.
  */
 
+const KSB_THAI_MONTHS = {
+    "มกราคม": 0, "กุมภาพันธ์": 1, "มีนาคม": 2, "เมษายน": 3, "พฤษภาคม": 4, "มิถุนายน": 5,
+    "กรกฎาคม": 6, "สิงหาคม": 7, "กันยายน": 8, "ตุลาคม": 9, "พฤศจิกายน": 10, "ธันวาคม": 11,
+    "ม.ค.": 0, "ก.พ.": 1, "มี.ค.": 2, "เม.ย.": 3, "พ.ค.": 4, "มิ.ย.": 5,
+    "ก.ค.": 6, "ส.ค.": 7, "ก.ย.": 8, "ต.ค.": 9, "พ.ย.": 10, "ธ.ค.": 11
+};
+
 async function ksbGetSemesterStart() {
     const stored = await ksbStorageGet(KSB_SEMESTER_START_KEY);
-    return stored || null;
+    if (stored) return stored;
+    
+    // Auto-detect fallback
+    return ksbAutoDetectSemesterStart();
+}
+
+function ksbAutoDetectSemesterStart() {
+    const text = document.body.innerText || "";
+    // Pattern: [Date] [Month] [Year]
+    // Example: 30 มิถุนายน 2569 or 30 มิ.ย. 2569
+    const regex = /(\d{1,2})\s+(\S+)\s+(\d{4})/g;
+    let match;
+    let earliestDate = null;
+
+    while ((match = regex.exec(text)) !== null) {
+        const day = parseInt(match[1]);
+        const monthText = match[2];
+        const yearBE = parseInt(match[3]);
+        
+        const month = KSB_THAI_MONTHS[monthText];
+        if (month === undefined) continue;
+
+        // Buddhist Era to Common Era
+        const yearCE = yearBE > 2400 ? yearBE - 543 : yearBE;
+        
+        const date = new Date(yearCE, month, day);
+        if (isNaN(date.getTime())) continue;
+
+        if (!earliestDate || date < earliestDate) {
+            earliestDate = date;
+        }
+    }
+
+    if (!earliestDate) return null;
+
+    const p = (n) => String(n).padStart(2, "0");
+    return `${earliestDate.getFullYear()}-${p(earliestDate.getMonth() + 1)}-${p(earliestDate.getDate())}`;
 }
 
 async function ksbSetSemesterStart(dateStr) {
