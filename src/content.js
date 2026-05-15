@@ -138,7 +138,10 @@ function ensureModalShell() {
     panel.innerHTML = `
     <div class="ksb-panel-header">
         <div class="ksb-panel-title">
-            <strong>${renderIcon("calendar")} KMITL Schedule Builder</strong>
+            <strong>
+                ${renderIcon("calendar")} KMITL Schedule Builder
+                <span class="ksb-attribution">Made by twtae & His beloved AI</span>
+            </strong>
             <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">${renderIcon("selected")} Selected: 0</span>
         </div>
 		<div class="ksb-panel-actions">
@@ -1103,7 +1106,10 @@ function renderSidebarLauncher(selectedCount) {
         : "Show KMITL Schedule Builder";
 
     const launcherHtml = `
-        <div class="ksb-sidebar-launcher-title">${renderIcon("calendar")} Schedule Builder</div>
+        <div class="ksb-sidebar-launcher-title">
+            ${renderIcon("calendar")} Schedule Builder
+            <span class="ksb-attribution">Made by twtae & His beloved AI</span>
+        </div>
         <div class="ksb-sidebar-launcher-count">${renderIcon("selected")} Selected: ${escapeHtml(selectedCount)}</div>
         <button
             class="ksb-sidebar-launcher-button"
@@ -2166,6 +2172,12 @@ function drawTimetableHeaders(ctx, layout, selectedCount) {
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText("KMITL Schedule Builder", layout.margin, layout.margin);
+
+    const titleWidth = ctx.measureText("KMITL Schedule Builder ").width;
+    ctx.fillStyle = "#999999";
+    ctx.font = "10px Arial, sans-serif";
+    // Adjust Y offset from +8 to +10 to align baselines better given the font sizes
+    ctx.fillText("Made by twtae & His beloved AI", layout.margin + titleWidth, layout.margin + 10);
 
     ctx.fillStyle = "#666666";
     ctx.font = "14px Arial, sans-serif";

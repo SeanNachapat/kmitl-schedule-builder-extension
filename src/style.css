@@ -159,6 +159,19 @@
     gap: 2px;
 }
 
+.ksb-attribution {
+    font-size: 10px;
+    font-weight: 400;
+    color: #999999;
+    margin-left: 4px;
+    opacity: 0.8;
+}
+
+.ksb-sidebar-launcher-title .ksb-attribution {
+    color: rgba(255, 255, 255, 0.7);
+    margin-left: 3px;
+}
+
 .ksb-icon {
     display: inline-flex;
     align-items: center;
@@ -184,8 +197,8 @@
 
 .ksb-panel-title strong {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    align-items: baseline;
+    gap: 4px;
     overflow: hidden;
     color: #333333;
     font-size: 15px;
@@ -210,8 +223,8 @@
 
 .ksb-sidebar-launcher-title {
     display: flex !important;
-    align-items: center !important;
-    gap: 6px !important;
+    align-items: baseline !important;
+    gap: 4px !important;
     margin-bottom: 4px !important;
     color: #ffffff !important;
     font-size: 13px !important;
