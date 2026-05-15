@@ -39,11 +39,30 @@ Download the generated timetable as a PNG image for sharing or saving.
 
 ## Installation
 
-1. Download or clone this repository to your local machine.
+There are two ways to install the extension locally.
+
+### Option 1: Download from the release page
+
+1. Go to the [Releases page](https://github.com/twtae/kmitl-schedule-builder-extension/releases).
+2. Download the latest `kmitl-schedule-builder-extension-v*.zip` file.
+3. Extract the ZIP file.
+4. Open Google Chrome and navigate to `chrome://extensions`.
+5. Enable "Developer mode" using the toggle in the top-right corner.
+6. Click the "Load unpacked" button.
+7. Select the extracted extension folder, which contains `manifest.json`.
+
+### Option 2: Clone the repository
+
+1. Clone this repository:
+
+   ```bash
+   git clone https://github.com/twtae/kmitl-schedule-builder-extension.git
+   ```
+
 2. Open Google Chrome and navigate to `chrome://extensions`.
 3. Enable "Developer mode" using the toggle in the top-right corner.
 4. Click the "Load unpacked" button.
-5. Select the folder containing the extension files (the folder with manifest.json).
+5. Select the cloned repository folder, which contains `manifest.json`.
 
 ## Usage
 
