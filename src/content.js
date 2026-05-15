@@ -69,7 +69,7 @@ let checkboxInjectionPending = false;
 let showRawTextDebug = false;
 let copyStatusTimer = null;
 let latestSelectedSubjects = [];
-let isPanelCollapsed = false;
+let isPanelCollapsed = true;
 let showSubjectGroups = false;
 let showSelectedList = false;
 
@@ -91,10 +91,25 @@ function observePageChanges() {
 }
 
 function injectExtensionUi() {
-    if (document.querySelector("#kmitl-schedule-builder-panel")) return;
+    ensureModalShell();
+    ensureSidebarLauncher();
+    updateScheduleBuilderVisibility();
+}
+
+function ensureModalShell() {
+    if (document.querySelector("#kmitl-schedule-builder-panel")) {
+        return;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.id = "kmitl-schedule-builder-modal-overlay";
+    overlay.setAttribute("aria-hidden", "true");
 
     const panel = document.createElement("div");
     panel.id = "kmitl-schedule-builder-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-label", "KMITL Schedule Builder");
 
     panel.innerHTML = `
     <div class="ksb-panel-header">
@@ -109,10 +124,10 @@ function injectExtensionUi() {
                 id="ksb-collapse-button"
                 type="button"
                 data-ksb-toggle-panel
-                aria-label="Hide KMITL Schedule Builder panel"
+                aria-label="Hide KMITL Schedule Builder modal"
                 aria-expanded="true"
             >
-                Hide
+                Close
             </button>
 		</div>
     </div>
@@ -154,7 +169,8 @@ function injectExtensionUi() {
     </div>
 	`;
 
-    document.body.appendChild(panel);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
 
     document
         .querySelector("#ksb-render-button")
@@ -164,12 +180,14 @@ function injectExtensionUi() {
         .querySelector("#ksb-clear-button")
         .addEventListener("click", clearSelectedSubjects);
 
+    overlay.addEventListener("click", handleBackdropClick);
+
     panel.addEventListener("click", async (event) => {
         if (!(event.target instanceof Element)) return;
 
         const panelToggle = event.target.closest("[data-ksb-toggle-panel]");
         if (panelToggle instanceof HTMLElement) {
-            togglePanelCollapsed();
+            closeScheduleBuilderModal();
             return;
         }
 
@@ -200,6 +218,18 @@ function injectExtensionUi() {
         await renderTimetable();
     });
 
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && isScheduleBuilderExpanded()) {
+            closeScheduleBuilderModal();
+        }
+    });
+    window.addEventListener("resize", updateModalSidebarOffset);
+
+    updateScheduleBuilderVisibility();
+}
+
+function updateScheduleBuilderVisibility() {
+    updateModalSidebarOffset();
     updatePanelCollapsedState();
     updateSectionToggleButtons();
     renderTimetable();
@@ -723,8 +753,30 @@ async function renderTimetable() {
 }
 
 function togglePanelCollapsed() {
-    isPanelCollapsed = !isPanelCollapsed;
-    updatePanelCollapsedState();
+    setScheduleBuilderExpanded(isPanelCollapsed);
+}
+
+function openScheduleBuilderModal() {
+    setScheduleBuilderExpanded(true);
+}
+
+function closeScheduleBuilderModal() {
+    setScheduleBuilderExpanded(false);
+}
+
+function setScheduleBuilderExpanded(isExpanded) {
+    isPanelCollapsed = !isExpanded;
+    updateScheduleBuilderVisibility();
+}
+
+function isScheduleBuilderExpanded() {
+    return !isPanelCollapsed;
+}
+
+function handleBackdropClick(event) {
+    if (event.target?.id === "kmitl-schedule-builder-modal-overlay") {
+        closeScheduleBuilderModal();
+    }
 }
 
 async function togglePanelSection(sectionName) {
@@ -741,19 +793,26 @@ async function togglePanelSection(sectionName) {
 }
 
 function updatePanelCollapsedState() {
+    const overlay = document.querySelector("#kmitl-schedule-builder-modal-overlay");
     const panel = document.querySelector("#kmitl-schedule-builder-panel");
     const collapseButton = document.querySelector("#ksb-collapse-button");
-    if (!panel || !collapseButton) return;
+    if (!overlay || !panel || !collapseButton) return;
 
     panel.classList.toggle("ksb-panel--collapsed", isPanelCollapsed);
-    collapseButton.textContent = isPanelCollapsed ? "Show" : "Hide";
+    overlay.classList.toggle("ksb-modal-overlay--open", !isPanelCollapsed);
+    overlay.setAttribute("aria-hidden", String(isPanelCollapsed));
+    collapseButton.textContent = "Close";
     collapseButton.setAttribute(
         "aria-label",
-        isPanelCollapsed
-            ? "Show KMITL Schedule Builder panel"
-            : "Hide KMITL Schedule Builder panel"
+        "Hide KMITL Schedule Builder modal"
     );
     collapseButton.setAttribute("aria-expanded", String(!isPanelCollapsed));
+
+    if (isPanelCollapsed) {
+        ensureSidebarLauncher();
+    } else {
+        removeSidebarLauncher();
+    }
 }
 
 function updateSectionToggleButtons() {
@@ -780,6 +839,140 @@ function updateSelectedCountDisplay(selectedCount) {
 
     if (countElement) countElement.textContent = countText;
     if (compactCountElement) compactCountElement.textContent = countText;
+    renderSidebarLauncher(selectedCount);
+}
+
+function findKmitlSidebar() {
+    const sidebarSelectors = [
+        "aside",
+        "nav",
+        "[class*='sidebar' i]",
+        "[class*='side-bar' i]",
+        "[class*='sidenav' i]",
+        "[class*='side-nav' i]",
+        "[class*='side-menu' i]",
+        "[class*='menu-left' i]",
+        "[class*='left-menu' i]",
+        "[class*='mat-sidenav' i]",
+        "[class*='ant-layout-sider' i]",
+    ];
+
+    return [...document.querySelectorAll(sidebarSelectors.join(","))]
+        .filter((element) => element instanceof HTMLElement)
+        .filter((element) => !element.closest("#kmitl-schedule-builder-modal-overlay"))
+        .filter((element) => !element.closest("#kmitl-schedule-builder-launcher"))
+        .map((element) => ({
+            element,
+            rect: element.getBoundingClientRect(),
+        }))
+        .filter(({ rect }) => {
+            return (
+                rect.width >= 120 &&
+                rect.width <= 460 &&
+                rect.height >= 240 &&
+                rect.left <= 80 &&
+                rect.right < window.innerWidth * 0.55
+            );
+        })
+        .sort((first, second) => {
+            return first.rect.left - second.rect.left || second.rect.height - first.rect.height;
+        })[0]?.element || null;
+}
+
+function getSidebarWidth() {
+    const sidebar = findKmitlSidebar();
+    if (!sidebar) return 320;
+
+    const rect = sidebar.getBoundingClientRect();
+    return Math.max(0, Math.min(Math.round(rect.right), window.innerWidth - 48));
+}
+
+function updateModalSidebarOffset() {
+    const overlay = document.querySelector("#kmitl-schedule-builder-modal-overlay");
+    if (!overlay) return;
+
+    const sidebarWidth = getSidebarWidth();
+    overlay.style.setProperty("--ksb-sidebar-width", `${sidebarWidth}px`);
+}
+
+function ensureSidebarLauncher() {
+    if (!isPanelCollapsed) {
+        removeSidebarLauncher();
+        return null;
+    }
+
+    let launcher = document.querySelector("#kmitl-schedule-builder-launcher");
+    if (!launcher) {
+        launcher = createSidebarLauncher();
+    }
+
+    const sidebar = findKmitlSidebar();
+    const launcherParent = sidebar || document.body;
+    const shouldUseFallback = !sidebar;
+
+    launcher.classList.toggle("ksb-sidebar-launcher--fallback", shouldUseFallback);
+
+    if (launcher.parentElement !== launcherParent) {
+        launcherParent.appendChild(launcher);
+    }
+
+    bindSidebarLauncherEvents(launcher);
+    renderSidebarLauncher(latestSelectedSubjects.length);
+    return launcher;
+}
+
+function createSidebarLauncher() {
+    const launcher = document.createElement("div");
+    launcher.id = "kmitl-schedule-builder-launcher";
+    return launcher;
+}
+
+function bindSidebarLauncherEvents(launcher) {
+    if (launcher.dataset.ksbLauncherBound === "true") return;
+
+    launcher.addEventListener("click", handleSidebarLauncherClick, true);
+    launcher.dataset.ksbLauncherBound = "true";
+}
+
+function handleSidebarLauncherClick(event) {
+    if (!(event.target instanceof Element)) return;
+
+    const showButton = event.target.closest("[data-ksb-open-modal]");
+    if (showButton instanceof HTMLElement) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        openScheduleBuilderModal();
+        return;
+    }
+}
+
+function renderSidebarLauncher(selectedCount) {
+    if (!isPanelCollapsed) return;
+
+    const launcher = document.querySelector("#kmitl-schedule-builder-launcher");
+    if (!launcher) return;
+
+    const launcherHtml = `
+        <div class="ksb-sidebar-launcher-title">Schedule Builder</div>
+        <div class="ksb-sidebar-launcher-count">Selected: ${escapeHtml(selectedCount)}</div>
+        <button
+            class="ksb-sidebar-launcher-button"
+            type="button"
+            data-ksb-open-modal
+            aria-label="Show KMITL Schedule Builder"
+        >
+            Show
+        </button>
+    `;
+
+    if (launcher.innerHTML.trim() !== launcherHtml.trim()) {
+        launcher.innerHTML = launcherHtml;
+    }
+}
+
+function removeSidebarLauncher() {
+    document.querySelector("#kmitl-schedule-builder-launcher")?.remove();
 }
 
 async function renderSelectedSubjectPanel() {
