@@ -20,7 +20,17 @@
 }
 
 #kmitl-schedule-builder-launcher {
-    margin: 12px !important;
+    --ksb-launcher-left: 12px;
+    --ksb-launcher-width: 260px;
+    --ksb-launcher-bottom: 16px;
+    position: fixed !important;
+    left: var(--ksb-launcher-left) !important;
+    bottom: var(--ksb-launcher-bottom) !important;
+    width: var(--ksb-launcher-width) !important;
+    z-index: 2147483646 !important;
+    pointer-events: auto !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
     padding: 10px !important;
     border: 1px solid rgba(255, 255, 255, 0.18) !important;
     border-left: 3px solid #f15a24 !important;
@@ -28,19 +38,7 @@
     background: #4a4a4a !important;
     color: #ffffff !important;
     font-family: Arial, sans-serif !important;
-    box-sizing: border-box !important;
     display: block !important;
-    position: relative !important;
-    z-index: 999998 !important;
-}
-
-#kmitl-schedule-builder-launcher.ksb-sidebar-launcher--fallback {
-    position: fixed !important;
-    top: 96px !important;
-    left: 12px !important;
-    width: 220px !important;
-    z-index: 999998 !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
 }
 
 .ksb-sidebar-launcher-title {
@@ -62,29 +60,37 @@
 }
 
 .ksb-sidebar-launcher-button {
-    display: inline-flex !important;
+    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     width: 100% !important;
-    min-height: 28px !important;
+    min-height: 30px !important;
     padding: 5px 8px !important;
     border: 1px solid #f15a24 !important;
     border-radius: 4px !important;
     background: #ffffff !important;
     color: #c9471c !important;
-    font-size: 12px !important;
-    line-height: normal !important;
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+    font-weight: 400 !important;
     cursor: pointer !important;
+    text-align: center !important;
     text-indent: 0 !important;
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-    z-index: 1000000 !important;
-    text-align: center !important;
-    font-weight: 400 !important;
+    position: relative !important;
+    z-index: 2147483647 !important;
     font-family: Arial, sans-serif !important;
     box-sizing: border-box !important;
-    position: relative !important;
+}
+
+.ksb-sidebar-launcher-button,
+.ksb-sidebar-launcher-button * {
+    color: #c9471c !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    text-indent: 0 !important;
 }
 
 #kmitl-schedule-builder-modal-overlay {

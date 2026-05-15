@@ -72,6 +72,7 @@ let latestSelectedSubjects = [];
 let isPanelCollapsed = true;
 let showSubjectGroups = false;
 let showSelectedList = false;
+const DEBUG_UI = false;
 
 function init() {
     observePageChanges();
@@ -224,12 +225,14 @@ function ensureModalShell() {
         }
     });
     window.addEventListener("resize", updateModalSidebarOffset);
+    window.addEventListener("resize", updateSidebarLauncherPosition);
 
     updateScheduleBuilderVisibility();
 }
 
 function updateScheduleBuilderVisibility() {
     updateModalSidebarOffset();
+    updateSidebarLauncherPosition();
     updatePanelCollapsedState();
     updateSectionToggleButtons();
     renderTimetable();
@@ -294,6 +297,7 @@ function schedulePageScan() {
         pageScanScheduled = false;
         injectCheckboxesIntoSubjectCards();
         injectExtensionUi();
+        updateSidebarLauncherPosition();
     }, 50);
 }
 
@@ -699,30 +703,76 @@ async function toggleSelectedSubject(subject, checked) {
 
     const nextSubjects = checked
         ? [
-			...selectedSubjects.filter((item) => item.id !== subject.id),
-			subject,
-		]
+            ...selectedSubjects.filter((item) => item.id !== subject.id),
+            subject,
+        ]
         : selectedSubjects.filter((item) => item.id !== subject.id);
 
-    await saveSelectedSubjects(nextSubjects);
+    try {
+        await saveSelectedSubjects(nextSubjects);
+    } catch (err) {
+        // chrome.storage may throw 'Extension context invalidated' if the
+        // extension is being reloaded/unloaded. Fail gracefully and keep
+        // selected subjects in memory.
+        if (DEBUG_UI) console.warn("[KSB] saveSelectedSubjects failed:", err);
+        latestSelectedSubjects = normalizeSelectedSubjects(nextSubjects);
+    }
 }
 
 async function getSelectedSubjects() {
-    const result = await chrome.storage.local.get(STORAGE_KEY);
-    const selectedSubjects = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
-    const normalizedSubjects = normalizeSelectedSubjects(selectedSubjects);
+    // Prefer chrome.storage.local, but gracefully fall back to localStorage
+    try {
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
+            const result = await chrome.storage.local.get(STORAGE_KEY);
+            const selectedSubjects = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+            const normalizedSubjects = normalizeSelectedSubjects(selectedSubjects);
 
-    if (normalizedSubjects.length !== selectedSubjects.length) {
-        await saveSelectedSubjects(normalizedSubjects);
+            if (normalizedSubjects.length !== selectedSubjects.length) {
+                // attempt to persist normalized form; swallow errors
+                try {
+                    await saveSelectedSubjects(normalizedSubjects);
+                } catch (e) {
+                    if (DEBUG_UI) console.warn("[KSB] Failed to save normalized subjects:", e);
+                }
+            }
+
+            return normalizedSubjects;
+        }
+    } catch (err) {
+        if (DEBUG_UI) console.warn("[KSB] chrome.storage.local.get failed:", err);
     }
 
-    return normalizedSubjects;
+    // Fallback to window.localStorage
+    try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return normalizeSelectedSubjects(Array.isArray(parsed) ? parsed : []);
+    } catch (err) {
+        if (DEBUG_UI) console.warn("[KSB] localStorage.getItem failed:", err);
+        return [];
+    }
 }
 
 async function saveSelectedSubjects(subjects) {
-    await chrome.storage.local.set({
-        [STORAGE_KEY]: normalizeSelectedSubjects(subjects),
-    });
+    const normalized = normalizeSelectedSubjects(subjects);
+
+    // Try chrome.storage.local first, fallback to localStorage
+    try {
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
+            await chrome.storage.local.set({ [STORAGE_KEY]: normalized });
+            return;
+        }
+    } catch (err) {
+        if (DEBUG_UI) console.warn("[KSB] chrome.storage.local.set failed:", err);
+    }
+
+    try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    } catch (err) {
+        if (DEBUG_UI) console.warn("[KSB] localStorage.setItem failed:", err);
+        // As a last resort, keep in-memory (not persisted)
+        latestSelectedSubjects = normalized;
+    }
 }
 
 function normalizeSelectedSubjects(subjects) {
@@ -757,6 +807,7 @@ function togglePanelCollapsed() {
 }
 
 function openScheduleBuilderModal() {
+    if (DEBUG_UI) console.debug("[KSB] openScheduleBuilderModal() called");
     setScheduleBuilderExpanded(true);
 }
 
@@ -895,6 +946,46 @@ function updateModalSidebarOffset() {
     overlay.style.setProperty("--ksb-sidebar-width", `${sidebarWidth}px`);
 }
 
+function getSidebarRect() {
+    const sidebar = findKmitlSidebar();
+    if (!sidebar) {
+        return {
+            left: 12,
+            width: 260,
+            top: 96,
+            bottom: 16,
+        };
+    }
+
+    const rect = sidebar.getBoundingClientRect();
+    return {
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        top: Math.round(rect.top),
+        bottom: Math.round(window.innerHeight - rect.bottom),
+    };
+}
+
+function updateSidebarLauncherPosition() {
+    const launcher = document.querySelector("#kmitl-schedule-builder-launcher");
+    if (!launcher) return;
+
+    const sidebarRect = getSidebarRect();
+    const launcherLeft = sidebarRect.left + 12;
+    const launcherWidth = Math.max(220, sidebarRect.width - 24);
+
+    launcher.style.setProperty("--ksb-launcher-left", `${launcherLeft}px`);
+    launcher.style.setProperty("--ksb-launcher-width", `${launcherWidth}px`);
+    launcher.style.setProperty("--ksb-launcher-bottom", `${sidebarRect.bottom}px`);
+
+    if (DEBUG_UI) {
+        console.debug(
+            "[KSB] Launcher position updated:",
+            { launcherLeft, launcherWidth, bottom: sidebarRect.bottom }
+        );
+    }
+}
+
 function ensureSidebarLauncher() {
     if (!isPanelCollapsed) {
         removeSidebarLauncher();
@@ -904,19 +995,11 @@ function ensureSidebarLauncher() {
     let launcher = document.querySelector("#kmitl-schedule-builder-launcher");
     if (!launcher) {
         launcher = createSidebarLauncher();
+        document.body.appendChild(launcher);
+        bindSidebarLauncherEvents(launcher);
     }
 
-    const sidebar = findKmitlSidebar();
-    const launcherParent = sidebar || document.body;
-    const shouldUseFallback = !sidebar;
-
-    launcher.classList.toggle("ksb-sidebar-launcher--fallback", shouldUseFallback);
-
-    if (launcher.parentElement !== launcherParent) {
-        launcherParent.appendChild(launcher);
-    }
-
-    bindSidebarLauncherEvents(launcher);
+    updateSidebarLauncherPosition();
     renderSidebarLauncher(latestSelectedSubjects.length);
     return launcher;
 }
@@ -942,6 +1025,7 @@ function handleSidebarLauncherClick(event) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
+        if (DEBUG_UI) console.debug("[KSB] Show button clicked (delegated)");
         openScheduleBuilderModal();
         return;
     }
@@ -968,7 +1052,27 @@ function renderSidebarLauncher(selectedCount) {
 
     if (launcher.innerHTML.trim() !== launcherHtml.trim()) {
         launcher.innerHTML = launcherHtml;
+        bindSidebarLauncherButton(launcher);
     }
+}
+
+function bindSidebarLauncherButton(launcher) {
+    const button = launcher.querySelector("[data-ksb-open-modal]");
+    if (!button || button.dataset.ksbOpenBound === "true") return;
+
+    button.addEventListener(
+        "click",
+        (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            if (DEBUG_UI) console.debug("[KSB] Show button clicked (direct)");
+            openScheduleBuilderModal();
+        },
+        true
+    );
+
+    button.dataset.ksbOpenBound = "true";
 }
 
 function removeSidebarLauncher() {
