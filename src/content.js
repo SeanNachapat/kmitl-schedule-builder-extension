@@ -60,7 +60,7 @@ const TIMETABLE_DAY_LABELS = {
     Sun: "Sun",
 };
 const TIMETABLE_START_MINUTE = 8 * 60;
-const TIMETABLE_END_MINUTE = 21 * 60;
+const TIMETABLE_END_MINUTE = 23 * 60;
 const TIMETABLE_SLOT_MINUTES = 30;
 const TIMETABLE_FIRST_SLOT_COLUMN = 2;
 let pageScanScheduled = false;
@@ -73,6 +73,29 @@ let isPanelCollapsed = true;
 let showSubjectGroups = false;
 let showSelectedList = false;
 const DEBUG_UI = false;
+
+function renderIcon(name) {
+    const icons = {
+        calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+        refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`,
+        clear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
+        close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+        copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+        download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+        groups: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`,
+        list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`,
+        warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+        conflict: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
+        info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`,
+        selected: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+        open: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 22 3 22 10"></polyline><line x1="10" y1="14" x2="22" y2="2"></line></svg>`,
+    };
+
+    const svg = icons[name] || "";
+    if (!svg) return "";
+
+    return `<span class="ksb-icon" aria-hidden="true">${svg}</span>`;
+}
 
 function init() {
     observePageChanges();
@@ -115,12 +138,12 @@ function ensureModalShell() {
     panel.innerHTML = `
     <div class="ksb-panel-header">
         <div class="ksb-panel-title">
-            <strong>KMITL Schedule Builder</strong>
-            <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">Selected: 0</span>
+            <strong>${renderIcon("calendar")} KMITL Schedule Builder</strong>
+            <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">${renderIcon("selected")} Selected: 0</span>
         </div>
 		<div class="ksb-panel-actions">
-			<button id="ksb-render-button" type="button">Refresh</button>
-			<button id="ksb-clear-button" type="button">Clear</button>
+			<button id="ksb-render-button" type="button">${renderIcon("refresh")} Refresh</button>
+			<button id="ksb-clear-button" type="button">${renderIcon("clear")} Clear</button>
             <button
                 id="ksb-collapse-button"
                 type="button"
@@ -128,7 +151,7 @@ function ensureModalShell() {
                 aria-label="Hide KMITL Schedule Builder modal"
                 aria-expanded="true"
             >
-                Close
+                ${renderIcon("close")} Close
             </button>
 		</div>
     </div>
@@ -142,7 +165,7 @@ function ensureModalShell() {
                     aria-label="Show subject groups"
                     aria-expanded="false"
                 >
-                    Show Groups
+                    ${renderIcon("groups")} Show Groups
                 </button>
                 <button
                     class="ksb-section-toggle"
@@ -151,15 +174,15 @@ function ensureModalShell() {
                     aria-label="Show selected classes list"
                     aria-expanded="false"
                 >
-                    Show List
+                    ${renderIcon("list")} Show List
                 </button>
             </div>
         </div>
         <div class="ksb-export-actions">
-            <button class="ksb-export-button" type="button" data-ksb-copy="classes" aria-label="Copy selected classes as plain text">Copy Classes</button>
-            <button class="ksb-export-button" type="button" data-ksb-copy="timetable" aria-label="Copy timetable summary as plain text">Copy Timetable</button>
-            <button class="ksb-export-button" type="button" data-ksb-copy="groups" aria-label="Copy subject groups as plain text">Copy Groups</button>
-            <button class="ksb-export-button" type="button" data-ksb-download="png" aria-label="Download timetable as PNG">Download PNG</button>
+            <button class="ksb-export-button" type="button" data-ksb-copy="classes" aria-label="Copy selected classes as plain text">${renderIcon("copy")} Copy Classes</button>
+            <button class="ksb-export-button" type="button" data-ksb-copy="timetable" aria-label="Copy timetable summary as plain text">${renderIcon("calendar")} Copy Timetable</button>
+            <button class="ksb-export-button" type="button" data-ksb-copy="groups" aria-label="Copy subject groups as plain text">${renderIcon("groups")} Copy Groups</button>
+            <button class="ksb-export-button" type="button" data-ksb-download="png" aria-label="Download timetable as PNG">${renderIcon("download")} Download PNG</button>
             <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
         </div>
         <div id="ksb-timetable"></div>
@@ -896,7 +919,7 @@ function updatePanelCollapsedState() {
     overlay.classList.toggle("ksb-modal-overlay--open", !isPanelCollapsed);
     document.documentElement.classList.toggle("ksb-modal-is-open", !isPanelCollapsed);
     overlay.setAttribute("aria-hidden", String(isPanelCollapsed));
-    collapseButton.textContent = "Close";
+    collapseButton.innerHTML = `${renderIcon("close")} Close`;
     collapseButton.setAttribute(
         "aria-label",
         "Hide KMITL Schedule Builder modal"
@@ -924,7 +947,8 @@ function updateSectionToggleButton(sectionName, label, isVisible) {
     const button = document.querySelector(`[data-ksb-toggle-section="${sectionName}"]`);
     if (!button) return;
 
-    button.textContent = `${isVisible ? "Hide" : "Show"} ${label}`;
+    const icon = sectionName === "groups" ? renderIcon("groups") : renderIcon("list");
+    button.innerHTML = `${icon} ${isVisible ? "Hide" : "Show"} ${label}`;
     button.setAttribute("aria-expanded", String(isVisible));
     button.setAttribute(
         "aria-label",
@@ -933,10 +957,11 @@ function updateSectionToggleButton(sectionName, label, isVisible) {
 }
 
 function updateSelectedCountDisplay(selectedCount) {
-    const countText = `Selected: ${selectedCount}`;
     const compactCountElement = document.querySelector("#ksb-selected-count-compact");
 
-    if (compactCountElement) compactCountElement.textContent = countText;
+    if (compactCountElement) {
+        compactCountElement.innerHTML = `${renderIcon("selected")} Selected: ${selectedCount}`;
+    }
     renderSidebarLauncher(selectedCount);
 }
 
@@ -1072,20 +1097,21 @@ function renderSidebarLauncher(selectedCount) {
     launcher.classList.toggle("ksb-sidebar-launcher--open", isOpen);
 
     const buttonText = isOpen ? "Close" : "Show";
+    const buttonIcon = isOpen ? renderIcon("close") : renderIcon("open");
     const buttonAriaLabel = isOpen
         ? "Close KMITL Schedule Builder"
         : "Show KMITL Schedule Builder";
 
     const launcherHtml = `
-        <div class="ksb-sidebar-launcher-title">Schedule Builder</div>
-        <div class="ksb-sidebar-launcher-count">Selected: ${escapeHtml(selectedCount)}</div>
+        <div class="ksb-sidebar-launcher-title">${renderIcon("calendar")} Schedule Builder</div>
+        <div class="ksb-sidebar-launcher-count">${renderIcon("selected")} Selected: ${escapeHtml(selectedCount)}</div>
         <button
             class="ksb-sidebar-launcher-button"
             type="button"
             data-ksb-open-modal="true"
             aria-label="${escapeHtml(buttonAriaLabel)}"
         >
-            <span class="ksb-sidebar-launcher-button-text">${escapeHtml(buttonText)}</span>
+            <span class="ksb-sidebar-launcher-button-text ksb-button-content">${buttonIcon} ${escapeHtml(buttonText)}</span>
         </button>
     `;
 
@@ -1173,7 +1199,7 @@ function renderSelectedSubjectList(subjects, conflictingSubjectIds = new Set()) 
 
     return `
     <div class="ksb-selected-subject-list">
-        <div class="ksb-selected-list-title">Selected classes</div>
+        <div class="ksb-selected-list-title">${renderIcon("list")} Selected classes</div>
         ${subjects.map((subject) => renderSelectedSubjectCard(subject, conflictingSubjectIds)).join("")}
     </div>
     `;
@@ -1259,7 +1285,7 @@ function renderConflictWarnings(conflicts) {
 
     return `
     <div class="ksb-conflict-warning">
-        <div class="ksb-conflict-title">Schedule conflicts</div>
+        <div class="ksb-conflict-title">${renderIcon("warning")} Schedule conflicts</div>
         ${conflicts.map(renderConflictItem).join("")}
     </div>
     `;
@@ -1396,7 +1422,7 @@ function renderSubjectGroupSummary(subjects) {
 
     return `
     <div class="ksb-subject-group-summary">
-        <div class="ksb-subject-group-title">Subject groups</div>
+        <div class="ksb-subject-group-title">${renderIcon("groups")} Subject groups</div>
         ${groupSummaries.map(renderSubjectGroup).join("")}
     </div>
     `;
@@ -1462,7 +1488,7 @@ function renderDuplicateSelectionWarnings(duplicates) {
 
     return `
     <div class="ksb-duplicate-warning">
-        <div class="ksb-duplicate-title">Duplicate or alternative selections</div>
+        <div class="ksb-duplicate-title">${renderIcon("info")} Duplicate or alternative selections</div>
         ${duplicates.map(renderDuplicateSelectionItem).join("")}
     </div>
     `;
@@ -1722,7 +1748,7 @@ function renderUnplaceableSubjects(subjects) {
 
     return `
     <div class="ksb-unplaceable-subjects">
-        <div class="ksb-unplaceable-title">Cannot place on timetable</div>
+        <div class="ksb-unplaceable-title">${renderIcon("info")} Cannot place on timetable</div>
         ${unplaceableSubjects.map(renderUnplaceableSubject).join("")}
     </div>
     `;
