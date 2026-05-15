@@ -154,10 +154,6 @@ function ensureModalShell() {
                     Show List
                 </button>
             </div>
-            <label class="ksb-debug-toggle">
-                <input id="ksb-debug-toggle" type="checkbox">
-                Debug raw text
-            </label>
         </div>
         <div class="ksb-export-actions">
             <button class="ksb-export-button" type="button" data-ksb-copy="classes" aria-label="Copy selected classes as plain text">Copy Classes</button>
@@ -1111,7 +1107,6 @@ async function renderSelectedSubjectPanel() {
     latestSelectedSubjects = selectedSubjects;
 
     const timetableElement = document.querySelector("#ksb-timetable");
-    const debugToggle = document.querySelector("#ksb-debug-toggle");
 
     if (!timetableElement) return;
 
@@ -1119,7 +1114,6 @@ async function renderSelectedSubjectPanel() {
     updateSelectedCountDisplay(selectedSubjects.length);
     updatePanelCollapsedState();
     updateSectionToggleButtons();
-    if (debugToggle) debugToggle.checked = showRawTextDebug;
 
     if (selectedSubjects.length === 0) {
         timetableElement.innerHTML = renderSelectedSubjectList(selectedSubjects);
@@ -1452,7 +1446,7 @@ function renderDuplicateSelectionItem(duplicate) {
         return [
             subject.section ? `section(${subject.section})` : "",
             getSubjectDisplayDay(subject),
-            [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+            [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" | "),
         ].filter(Boolean).join(" | ");
     });
 
@@ -1880,7 +1874,6 @@ function renderSelectedSubjectCard(subject, conflictingSubjectIds = new Set()) {
         .join(" | ");
     const location = getSubjectDisplayLocation(subject);
     const teacher = normalizeWhitespace(subject.teacher);
-    const rawText = String(subject.rawText || "").trim();
     const conflictClass = isSubjectConflicting(subject, conflictingSubjectIds)
         ? " ksb-selected-subject--conflict"
         : "";
@@ -1904,7 +1897,6 @@ function renderSelectedSubjectCard(subject, conflictingSubjectIds = new Set()) {
         ${metaParts ? `<div class="ksb-selected-subject-meta">${metaParts}</div>` : ""}
         ${location ? `<div class="ksb-selected-subject-room">${escapeHtml(location)}</div>` : ""}
         ${teacher ? `<div class="ksb-selected-subject-teacher">${escapeHtml(teacher)}</div>` : ""}
-        ${showRawTextDebug && rawText ? `<pre class="ksb-selected-subject-raw">${escapeHtml(rawText)}</pre>` : ""}
     </div>
     `;
 }
