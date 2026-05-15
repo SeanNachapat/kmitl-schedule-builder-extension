@@ -1,8 +1,8 @@
 {
 	"manifest_version": 3,
 	"name": "KMITL Schedule Builder",
-	"version": "0.2.0",
-	"description": "Unofficial timetable builder for KMITL registration class data.",
+	"version": "0.3.0",
+	"description": "Enhanced timetable builder for KMITL with conflict suggestions and schedule sharing.",
 	"icons": {
 		"16": "icons/icon16.png",
 		"32": "icons/icon32.png",
@@ -10,25 +10,32 @@
 		"128": "icons/icon128.png"
 	},
 	"action": {
-		"default_title": "KMITL Schedule Builder",
-		"default_icon": {
-			"16": "icons/icon16.png",
-			"32": "icons/icon32.png",
-			"48": "icons/icon48.png",
-			"128": "icons/icon128.png"
-		}
+		"default_popup": "popup.html",
+		"default_title": "KMITL Schedule Builder"
 	},
 	"permissions": ["storage"],
+	"background": {
+		"service_worker": "background.js"
+	},
 	"content_scripts": [
 		{
 			"matches": ["https://regis.reg.kmitl.ac.th/*"],
-			"js": ["src/content.js"],
+			"js": [
+				"src/utils.js",
+
+				"src/color-coding.js",
+				"src/credit-counter.js",
+				"src/conflict-checker.js",
+				"src/share.js",
+				"src/offline.js",
+				"src/content.js"
+			],
 			"run_at": "document_idle"
 		}
 	],
 	"web_accessible_resources": [
 		{
-			"resources": ["src/style.css"],
+			"resources": ["src/style.css", "popup.css"],
 			"matches": ["https://regis.reg.kmitl.ac.th/*"]
 		}
 	]
