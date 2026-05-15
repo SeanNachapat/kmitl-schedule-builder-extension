@@ -22,11 +22,11 @@
 #kmitl-schedule-builder-launcher {
     --ksb-launcher-left: 12px;
     --ksb-launcher-width: 260px;
-    --ksb-launcher-top: 220px;
+    --ksb-launcher-bottom: 16px;
     position: fixed !important;
     left: var(--ksb-launcher-left, 12px) !important;
-    top: var(--ksb-launcher-top, 220px) !important;
-    bottom: auto !important;
+    bottom: var(--ksb-launcher-bottom, 16px) !important;
+    top: auto !important;
     width: var(--ksb-launcher-width, 260px) !important;
     z-index: 2147483646 !important;
     pointer-events: auto !important;
@@ -118,7 +118,7 @@
     justify-content: center !important;
     padding: 24px !important;
     background: rgba(51, 51, 51, 0.28) !important;
-    z-index: 999999 !important;
+    z-index: 2147483645 !important;
     box-sizing: border-box !important;
 }
 

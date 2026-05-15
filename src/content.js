@@ -808,14 +808,29 @@ function togglePanelCollapsed() {
 
 function openScheduleBuilderModal() {
     debugUi("openScheduleBuilderModal() called");
-    ensureModalShell();
-    updateModalSidebarOffset();
-    setScheduleBuilderExpanded(true);
-    renderTimetable();
+    try {
+        ensureModalShell();
+        isPanelCollapsed = false;
+        updateModalSidebarOffset();
+        updatePanelCollapsedState();
+        updateSectionToggleButtons();
+        renderTimetable();
+        debugUi("Modal opened successfully", { isOpen: isModalOpen() });
+    } catch (error) {
+        console.error("[KSB] Failed to open schedule builder modal", error);
+    }
 }
 
 function closeScheduleBuilderModal() {
-    setScheduleBuilderExpanded(false);
+    try {
+        isPanelCollapsed = true;
+        updatePanelCollapsedState();
+        updateSectionToggleButtons();
+        ensureSidebarLauncher();
+        debugUi("Modal closed successfully", { isOpen: isModalOpen() });
+    } catch (error) {
+        console.error("[KSB] Failed to close schedule builder modal", error);
+    }
 }
 
 function setScheduleBuilderExpanded(isExpanded) {
@@ -911,26 +926,31 @@ function findKmitlSidebar() {
         "[class*='ant-layout-sider' i]",
     ];
 
-    return [...document.querySelectorAll(sidebarSelectors.join(","))]
-        .filter((element) => element instanceof HTMLElement)
-        .filter((element) => !element.closest("#kmitl-schedule-builder-modal-overlay"))
-        .filter((element) => !element.closest("#kmitl-schedule-builder-launcher"))
-        .map((element) => ({
-            element,
-            rect: element.getBoundingClientRect(),
-        }))
-        .filter(({ rect }) => {
-            return (
-                rect.width >= 120 &&
-                rect.width <= 460 &&
-                rect.height >= 240 &&
-                rect.left <= 80 &&
-                rect.right < window.innerWidth * 0.55
-            );
-        })
-        .sort((first, second) => {
-            return first.rect.left - second.rect.left || second.rect.height - first.rect.height;
-        })[0]?.element || null;
+    try {
+        return [...document.querySelectorAll(sidebarSelectors.join(","))]
+            .filter((element) => element instanceof HTMLElement)
+            .filter((element) => !element.closest("#kmitl-schedule-builder-modal-overlay"))
+            .filter((element) => !element.closest("#kmitl-schedule-builder-launcher"))
+            .map((element) => ({
+                element,
+                rect: element.getBoundingClientRect(),
+            }))
+            .filter(({ rect }) => {
+                return (
+                    rect.width >= 120 &&
+                    rect.width <= 460 &&
+                    rect.height >= 240 &&
+                    rect.left <= 80 &&
+                    rect.right < window.innerWidth * 0.55
+                );
+            })
+            .sort((first, second) => {
+                return first.rect.left - second.rect.left || second.rect.height - first.rect.height;
+            })[0]?.element || null;
+    } catch (error) {
+        console.warn("[KSB] Failed to find sidebar", error);
+        return null;
+    }
 }
 
 function getSidebarWidth() {
@@ -976,16 +996,16 @@ function updateSidebarLauncherPosition() {
     const sidebarRect = getSidebarRect();
     const launcherLeft = sidebarRect.left + 12;
     const launcherWidth = Math.max(220, sidebarRect.width - 24);
-    const launcherTop = Math.max(96, sidebarRect.top + 420);
+    const launcherBottom = 16;
 
     launcher.style.setProperty("--ksb-launcher-left", `${launcherLeft}px`);
     launcher.style.setProperty("--ksb-launcher-width", `${launcherWidth}px`);
-    launcher.style.setProperty("--ksb-launcher-top", `${launcherTop}px`);
+    launcher.style.setProperty("--ksb-launcher-bottom", `${launcherBottom}px`);
 
     if (DEBUG_UI) {
         console.debug(
             "[KSB] Launcher position updated:",
-            { launcherLeft, launcherWidth, launcherTop }
+            { launcherLeft, launcherWidth, launcherBottom }
         );
     }
 }
@@ -1000,7 +1020,6 @@ function ensureSidebarLauncher() {
     if (!launcher) {
         launcher = createSidebarLauncher();
         document.body.appendChild(launcher);
-        bindSidebarLauncherEvents(launcher);
     }
 
     updateSidebarLauncherPosition();
@@ -1014,32 +1033,18 @@ function createSidebarLauncher() {
     return launcher;
 }
 
-function bindSidebarLauncherEvents(launcher) {
-    if (launcher.dataset.ksbLauncherBound === "true") return;
 
-    launcher.addEventListener("click", handleSidebarLauncherClick, true);
-    launcher.dataset.ksbLauncherBound = "true";
-}
-
-function handleSidebarLauncherClick(event) {
-    if (!(event.target instanceof Element)) return;
-
-    const showButton = event.target.closest("[data-ksb-open-modal]");
-    if (showButton instanceof HTMLElement) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        debugUi("Show button clicked (delegated)");
-        openScheduleBuilderModal();
-        return;
-    }
-}
 
 function renderSidebarLauncher(selectedCount) {
     if (!isPanelCollapsed) return;
 
     const launcher = document.querySelector("#kmitl-schedule-builder-launcher");
     if (!launcher) return;
+
+    if (launcher.dataset.ksbSelectedCount === String(selectedCount)) {
+        return;
+    }
+    launcher.dataset.ksbSelectedCount = String(selectedCount);
 
     const launcherHtml = `
         <div class="ksb-sidebar-launcher-title">Schedule Builder</div>
@@ -1054,10 +1059,8 @@ function renderSidebarLauncher(selectedCount) {
         </button>
     `;
 
-    if (launcher.innerHTML.trim() !== launcherHtml.trim()) {
-        launcher.innerHTML = launcherHtml;
-        bindSidebarLauncherButton(launcher);
-    }
+    launcher.innerHTML = launcherHtml;
+    bindSidebarLauncherButton(launcher);
 }
 
 function bindSidebarLauncherButton(launcher) {
@@ -1065,24 +1068,32 @@ function bindSidebarLauncherButton(launcher) {
     if (!(button instanceof HTMLButtonElement)) return;
     if (button.dataset.ksbOpenBound === "true") return;
 
-    button.addEventListener(
-        "click",
-        (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-            debugUi("Show button clicked (direct)");
+    button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        debugUi("Show button clicked (direct)");
+        try {
             openScheduleBuilderModal();
-        },
-        true
-    );
+        } catch (error) {
+            console.error("[KSB] Show button click failed", error);
+        }
+    });
 
     button.dataset.ksbOpenBound = "true";
 }
 
 function debugUi(message, data) {
-    if (!DEBUG_UI) return;
+    if (typeof DEBUG_UI === "undefined" || !DEBUG_UI) return;
     console.debug("[KSB UI]", message, data || "");
+}
+
+function isModalOpen() {
+    return (
+        document
+            .querySelector("#kmitl-schedule-builder-modal-overlay")
+            ?.classList
+            .contains("ksb-modal-overlay--open") || false
+    );
 }
 
 function removeSidebarLauncher() {
