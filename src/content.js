@@ -21,7 +21,6 @@ async function init() {
     
     // Initialize new modules
     try {
-        await ksbInitDarkMode();
         await ksbInitColorCoding();
         await ksbInitOffline();
     } catch (err) {
