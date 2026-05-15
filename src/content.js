@@ -873,6 +873,7 @@ function updatePanelCollapsedState() {
 
     panel.classList.toggle("ksb-panel--collapsed", isPanelCollapsed);
     overlay.classList.toggle("ksb-modal-overlay--open", !isPanelCollapsed);
+    document.documentElement.classList.toggle("ksb-modal-is-open", !isPanelCollapsed);
     overlay.setAttribute("aria-hidden", String(isPanelCollapsed));
     collapseButton.textContent = "Close";
     collapseButton.setAttribute(

@@ -115,7 +115,7 @@
     align-items: center !important;
     justify-content: center !important;
     padding: 24px !important;
-    background: rgba(51, 51, 51, 0.28) !important;
+    background: rgba(51, 51, 51, 0.45) !important;
     z-index: 2147483645 !important;
     box-sizing: border-box !important;
 }
@@ -723,6 +723,10 @@
     cursor: pointer;
     user-select: none;
     transition: all 0.2s ease;
+}
+
+html.ksb-modal-is-open .ksb-checkbox-wrapper {
+    visibility: hidden !important;
 }
 
 .ksb-checkbox-wrapper:hover {
