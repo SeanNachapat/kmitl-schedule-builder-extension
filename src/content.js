@@ -315,15 +315,24 @@ function findSubjectCards() {
      * - visible text contains HH:mm - HH:mm
      */
     const rows = findSubjectRows();
+
+    // The real KMITL teaching table is table-based.
+    // If rows are found, do not run broad fallback detection,
+    // because fallback can accidentally detect our modal/timetable UI.
+    if (rows.length > 0) {
+        return rows;
+    }
+
     const candidates = [...document.querySelectorAll(SUBJECT_CARD_CANDIDATE_SELECTOR)]
         .filter((element) => element instanceof HTMLElement)
+        .filter((element) => !isInsideScheduleBuilderUi(element))
         .filter(isLikelySubjectCard);
 
     const fallbackCards = candidates.filter((element) => {
         return !hasSubjectCardChild(element, candidates);
     });
 
-    return [...rows, ...fallbackCards];
+    return fallbackCards;
 }
 
 function findSubjectRows() {
@@ -334,7 +343,7 @@ function findSubjectRows() {
 
 function isLikelySubjectCard(element) {
     if (!(element instanceof HTMLElement)) return false;
-    if (element.closest("#kmitl-schedule-builder-panel")) return false;
+    if (isInsideScheduleBuilderUi(element)) return false;
 
     if (element instanceof HTMLTableRowElement) {
         return isLikelyKmitlTableRow(element);
@@ -348,6 +357,7 @@ function isLikelyKmitlTableRow(row) {
 }
 
 function isLikelySubjectRow(row) {
+    if (isInsideScheduleBuilderUi(row)) return false;
     if (row.classList.contains("table-space-tr")) return false;
 
     const cells = getDirectTableCells(row);
@@ -386,6 +396,17 @@ function hasFallbackSubjectCardText(element) {
     const hasTime = TIME_RANGE_PATTERN.test(text);
 
     return hasSection && hasTime;
+}
+
+function isInsideScheduleBuilderUi(element) {
+    if (!(element instanceof HTMLElement)) return false;
+
+    return Boolean(
+        element.closest("#kmitl-schedule-builder-modal-overlay") ||
+        element.closest("#kmitl-schedule-builder-panel") ||
+        element.closest("#kmitl-schedule-builder-launcher") ||
+        [...element.classList].some((className) => className.startsWith("ksb-"))
+    );
 }
 
 function getCheckboxInjectionTarget(element) {
@@ -882,11 +903,16 @@ function updatePanelCollapsedState() {
     );
     collapseButton.setAttribute("aria-expanded", String(!isPanelCollapsed));
 
-    if (isPanelCollapsed) {
-        ensureSidebarLauncher();
-    } else {
-        removeSidebarLauncher();
+    ensureSidebarLauncher();
+}
+
+function toggleScheduleBuilderModal() {
+    if (isScheduleBuilderExpanded()) {
+        closeScheduleBuilderModal();
+        return;
     }
+
+    openScheduleBuilderModal();
 }
 
 function updateSectionToggleButtons() {
@@ -1014,11 +1040,6 @@ function updateSidebarLauncherPosition() {
 }
 
 function ensureSidebarLauncher() {
-    if (!isPanelCollapsed) {
-        removeSidebarLauncher();
-        return null;
-    }
-
     let launcher = document.querySelector("#kmitl-schedule-builder-launcher");
     if (!launcher) {
         launcher = createSidebarLauncher();
@@ -1039,15 +1060,21 @@ function createSidebarLauncher() {
 
 
 function renderSidebarLauncher(selectedCount) {
-    if (!isPanelCollapsed) return;
-
     const launcher = document.querySelector("#kmitl-schedule-builder-launcher");
     if (!launcher) return;
 
-    if (launcher.dataset.ksbSelectedCount === String(selectedCount)) {
+    const isOpen = isScheduleBuilderExpanded();
+    const launcherStateKey = `${selectedCount}:${isOpen ? "open" : "closed"}`;
+    if (launcher.dataset.ksbRenderState === launcherStateKey) {
         return;
     }
-    launcher.dataset.ksbSelectedCount = String(selectedCount);
+    launcher.dataset.ksbRenderState = launcherStateKey;
+    launcher.classList.toggle("ksb-sidebar-launcher--open", isOpen);
+
+    const buttonText = isOpen ? "Close" : "Show";
+    const buttonAriaLabel = isOpen
+        ? "Close KMITL Schedule Builder"
+        : "Show KMITL Schedule Builder";
 
     const launcherHtml = `
         <div class="ksb-sidebar-launcher-title">Schedule Builder</div>
@@ -1056,9 +1083,9 @@ function renderSidebarLauncher(selectedCount) {
             class="ksb-sidebar-launcher-button"
             type="button"
             data-ksb-open-modal="true"
-            aria-label="Show KMITL Schedule Builder"
+            aria-label="${escapeHtml(buttonAriaLabel)}"
         >
-            <span class="ksb-sidebar-launcher-button-text">Show</span>
+            <span class="ksb-sidebar-launcher-button-text">${escapeHtml(buttonText)}</span>
         </button>
     `;
 
@@ -1074,11 +1101,11 @@ function bindSidebarLauncherButton(launcher) {
     button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        debugUi("Show button clicked (direct)");
+        debugUi("Launcher button clicked (direct)");
         try {
-            openScheduleBuilderModal();
+            toggleScheduleBuilderModal();
         } catch (error) {
-            console.error("[KSB] Show button click failed", error);
+            console.error("[KSB] Launcher button click failed", error);
         }
     });
 

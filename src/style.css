@@ -725,17 +725,24 @@
     transition: all 0.2s ease;
 }
 
-html.ksb-modal-is-open .ksb-checkbox-wrapper {
-    visibility: hidden !important;
-}
-
-.ksb-checkbox-wrapper:hover {
-    border-color: #f15a24;
-    background: #fff3ed;
+.ksb-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    margin: 4px;
+    padding: 4px 8px;
+    border: 1px solid #f15a24;
+    border-radius: 4px;
+    background: #ffffff;
     color: #c9471c;
-}
-
-.ksb-subject-checkbox {
-    margin: 0 !important;
+    font-size: 12px;
     cursor: pointer;
+    /* keep the checkbox in the normal flow and stacking context
+       so it never appears above the site header */
+    position: static;
+    z-index: auto;
+}
+.ksb-subject-checkbox {
+    accent-color: #f15a24;
 }
