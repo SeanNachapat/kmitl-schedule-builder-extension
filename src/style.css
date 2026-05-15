@@ -167,7 +167,6 @@
     display: block;
 }
 
-.ksb-title-with-icon,
 .ksb-button-content {
     display: inline-flex;
     align-items: center;
@@ -298,16 +297,9 @@
 .ksb-section-toggle:focus-visible,
 .ksb-remove-subject-button:focus-visible,
 .ksb-sidebar-launcher-button:focus-visible,
-.ksb-debug-toggle input:focus-visible,
 .ksb-subject-checkbox:focus-visible {
     outline: 2px solid #f15a24 !important;
     outline-offset: 2px !important;
-}
-
-#ksb-selected-count {
-    color: #333333;
-    font-size: 12px;
-    font-weight: 700;
 }
 
 .ksb-panel-toolbar {
@@ -322,20 +314,6 @@
     background: #fff3ed;
     border-color: #f15a24;
     color: #c9471c;
-}
-
-.ksb-debug-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    color: #666666;
-    font-size: 12px;
-    cursor: pointer;
-    user-select: none;
-}
-
-.ksb-debug-toggle input {
-    accent-color: #f15a24;
 }
 
 .ksb-export-actions {
@@ -711,22 +689,6 @@
     line-height: 1.4;
 }
 
-.ksb-selected-subject-raw {
-    max-height: 160px;
-    overflow: auto;
-    margin: 8px 0 0;
-    padding: 8px;
-    border: 1px solid #dedede;
-    border-radius: 4px;
-    background: #f5f5f5;
-    color: #333333;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 11px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
 @media (max-width: 900px) {
     #kmitl-schedule-builder-modal-overlay {
         left: 0;
@@ -736,10 +698,6 @@
     #kmitl-schedule-builder-panel {
         width: min(100%, calc(100vw - 24px));
         max-height: 88vh;
-    }
-
-    #kmitl-schedule-builder-launcher.ksb-sidebar-launcher--fallback {
-        width: 190px;
     }
 }
 

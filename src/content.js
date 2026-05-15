@@ -66,7 +66,6 @@ const TIMETABLE_FIRST_SLOT_COLUMN = 2;
 let pageScanScheduled = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
-let showRawTextDebug = false;
 let copyStatusTimer = null;
 let latestSelectedSubjects = [];
 let isPanelCollapsed = true;
@@ -238,15 +237,6 @@ function ensureModalShell() {
         if (!(removeButton instanceof HTMLElement)) return;
 
         await removeSelectedSubject(removeButton.dataset.ksbRemoveSubjectId);
-    });
-
-    panel.addEventListener("change", async (event) => {
-        if (!(event.target instanceof HTMLInputElement)) return;
-        if (event.target.id !== "ksb-debug-toggle") return;
-
-        showRawTextDebug = event.target.checked;
-        if (showRawTextDebug) showSelectedList = true;
-        await renderTimetable();
     });
 
     document.addEventListener("keydown", (event) => {
@@ -616,10 +606,6 @@ function extractTimeRange(text) {
     };
 }
 
-function extractDayAndTime(value) {
-    return parseClassScheduleText(value);
-}
-
 function parseClassScheduleText(value) {
     const text = normalizeWhitespace(value);
     const timeRange = extractTimeRange(text);
@@ -658,10 +644,6 @@ function normalizeDayKey(value) {
 
 function extractExamInfo(value) {
     return normalizeWhitespace(value);
-}
-
-function extractDay(text) {
-    return normalizeDayKey(extractThaiDayText(text) || text);
 }
 
 function extractRoom(text) {
@@ -708,10 +690,6 @@ function getDirectTableCells(row) {
 function getCellText(row, columnIndex) {
     const cells = getDirectTableCells(row);
     return normalizeWhitespace(cells[columnIndex]?.innerText || "");
-}
-
-function normalizeText(value) {
-    return normalizeWhitespace(value);
 }
 
 function normalizeWhitespace(value) {
@@ -779,7 +757,7 @@ async function getSelectedSubjects() {
             const normalizedSubjects = normalizeSelectedSubjects(selectedSubjects);
 
             if (normalizedSubjects.length !== selectedSubjects.length) {
-                // attempt to persist normalized form; swallow errors
+                // Persist normalized storage when possible.
                 try {
                     await saveSelectedSubjects(normalizedSubjects);
                 } catch (e) {
@@ -853,12 +831,7 @@ async function renderTimetable() {
     await renderSelectedSubjectPanel();
 }
 
-function togglePanelCollapsed() {
-    setScheduleBuilderExpanded(isPanelCollapsed);
-}
-
 function openScheduleBuilderModal() {
-    debugUi("openScheduleBuilderModal() called");
     try {
         ensureModalShell();
         isPanelCollapsed = false;
@@ -866,7 +839,6 @@ function openScheduleBuilderModal() {
         updatePanelCollapsedState();
         updateSectionToggleButtons();
         renderTimetable();
-        debugUi("Modal opened successfully", { isOpen: isModalOpen() });
     } catch (error) {
         console.error("[KSB] Failed to open schedule builder modal", error);
     }
@@ -878,15 +850,9 @@ function closeScheduleBuilderModal() {
         updatePanelCollapsedState();
         updateSectionToggleButtons();
         ensureSidebarLauncher();
-        debugUi("Modal closed successfully", { isOpen: isModalOpen() });
     } catch (error) {
         console.error("[KSB] Failed to close schedule builder modal", error);
     }
-}
-
-function setScheduleBuilderExpanded(isExpanded) {
-    isPanelCollapsed = !isExpanded;
-    updateScheduleBuilderVisibility();
 }
 
 function isScheduleBuilderExpanded() {
@@ -1133,7 +1099,6 @@ function bindSidebarLauncherButton(launcher) {
     button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        debugUi("Launcher button clicked (direct)");
         try {
             toggleScheduleBuilderModal();
         } catch (error) {
@@ -1142,24 +1107,6 @@ function bindSidebarLauncherButton(launcher) {
     });
 
     button.dataset.ksbOpenBound = "true";
-}
-
-function debugUi(message, data) {
-    if (typeof DEBUG_UI === "undefined" || !DEBUG_UI) return;
-    console.debug("[KSB UI]", message, data || "");
-}
-
-function isModalOpen() {
-    return (
-        document
-            .querySelector("#kmitl-schedule-builder-modal-overlay")
-            ?.classList
-            .contains("ksb-modal-overlay--open") || false
-    );
-}
-
-function removeSidebarLauncher() {
-    document.querySelector("#kmitl-schedule-builder-launcher")?.remove();
 }
 
 async function renderSelectedSubjectPanel() {
@@ -2176,7 +2123,6 @@ function drawTimetableHeaders(ctx, layout, selectedCount) {
     const titleWidth = ctx.measureText("KMITL Schedule Builder ").width;
     ctx.fillStyle = "#999999";
     ctx.font = "10px Arial, sans-serif";
-    // Adjust Y offset from +8 to +10 to align baselines better given the font sizes
     ctx.fillText("Made by twtae & His beloved AI", layout.margin + titleWidth, layout.margin + 10);
 
     ctx.fillStyle = "#666666";

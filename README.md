@@ -13,10 +13,29 @@ An unofficial Chrome extension for the KMITL registration website (regis.reg.kmi
 
 ## Screenshots
 
-![Subject Selection](docs/images/1.png)
-![Launcher Interface](docs/images/2.png)
-![Timetable Modal](docs/images/3.png)
-![Conflicts and Groups](docs/images/4.png)
+### Subject selection
+
+![Checkboxes added to the KMITL subject table](docs/images/1.png)
+
+Select classes directly from the KMITL teaching table.
+
+### Launcher
+
+![Schedule Builder launcher showing the selected subject count](docs/images/2.png)
+
+Open the builder from the fixed launcher without leaving the page.
+
+### Timetable modal
+
+![Generated weekly timetable modal](docs/images/3.png)
+
+Review selected classes in a weekly timetable.
+
+### Exported PNG
+
+![Exported timetable PNG](docs/images/4.png)
+
+Download the generated timetable as a PNG image for sharing or saving.
 
 ## Installation
 
