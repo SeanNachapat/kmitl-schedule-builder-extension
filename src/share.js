@@ -49,19 +49,20 @@ function ksbEncodeShareLink(subjects) {
         const data = ksbBuildShareableData(subjects);
         const json = JSON.stringify(data);
         const encoded = btoa(unescape(encodeURIComponent(json)));
-        return `${window.location.origin}${window.location.pathname}#ksb-share=${encoded}`;
+        const url = new URL(window.location.href);
+        url.searchParams.set("ksb_share", encoded);
+        return url.toString();
     } catch (e) {
         console.warn("[KSB] Share encoding failed:", e);
         return null;
     }
 }
 
-function ksbDecodeShareFragment() {
-    const hash = window.location.hash;
-    const prefix = "#ksb-share=";
-    if (!hash.startsWith(prefix)) return null;
+function ksbDecodeShareUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const encoded = urlParams.get("ksb_share");
+    if (!encoded) return null;
     try {
-        const encoded = hash.substring(prefix.length);
         const json = decodeURIComponent(escape(atob(encoded)));
         return ksbDecodeShareableData(JSON.parse(json));
     } catch (e) {

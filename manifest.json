@@ -26,7 +26,6 @@
 				"src/color-coding.js",
 				"src/credit-counter.js",
 				"src/conflict-checker.js",
-				"src/calendar-export.js",
 				"src/share.js",
 				"src/offline.js",
 				"src/content.js"

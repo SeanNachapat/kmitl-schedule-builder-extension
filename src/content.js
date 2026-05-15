@@ -29,10 +29,15 @@ async function init() {
     }
     
     // Check for shared links
-    const sharedSubjects = ksbDecodeShareFragment();
+    const sharedSubjects = ksbDecodeShareUrl();
     if (sharedSubjects) {
         if (confirm("Import shared schedule? This will replace your current one.")) {
             await saveSelectedSubjects(sharedSubjects);
+            
+            // Clean up URL
+            const url = new URL(window.location.href);
+            url.searchParams.delete("ksb_share");
+            window.history.replaceState({}, "", url);
         }
     }
 
@@ -41,9 +46,7 @@ async function init() {
     
     // Listen for messages from popup
     chrome.runtime.onMessage.addListener((request) => {
-        if (request.action === 'updateTheme') ksbApplyTheme(request.theme);
-        if (request.action === 'exportGCal') handleGCalExport();
-        if (request.action === 'exportICS') handleIcalExport();
+        // Shared messages logic can go here if needed
     });
 }
 
@@ -254,18 +257,15 @@ function ensureModalShell() {
             <button class="ksb-export-button" type="button" data-ksb-action="copy-reg-codes" title="Copy codes for registration page">${ksbRenderIcon("register")} Copy codes</button>
             <div class="ksb-dropdown">
                 <button class="ksb-export-button ksb-dropdown-toggle" type="button">
-                    ${ksbRenderIcon("share")} Export / Share ${ksbRenderIcon("chevron-down")}
+                    ${ksbRenderIcon("share")} Share ${ksbRenderIcon("chevron-down")}
                 </button>
                 <div class="ksb-dropdown-menu">
-                    <button class="ksb-dropdown-item" type="button" data-ksb-action="export-gcal">${ksbRenderIcon("calendar")} Google Calendar</button>
-                    <button class="ksb-dropdown-item" type="button" data-ksb-action="export-ics">${ksbRenderIcon("download")} iCal File (.ics)</button>
                     <button class="ksb-dropdown-item" type="button" data-ksb-action="copy-share-link">${ksbRenderIcon("share")} Copy Share Link</button>
                     <button class="ksb-dropdown-item" type="button" data-ksb-action="download-png">${ksbRenderIcon("image")} Download Image</button>
                 </div>
             </div>
             <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
         </div>
-        <div id="ksb-semester-picker-container"></div>
         <div id="ksb-compare-container"></div>
         <div id="ksb-offline-banner-container"></div>
         <div id="ksb-timetable"></div>
@@ -292,16 +292,6 @@ function ensureModalShell() {
     panel.addEventListener("click", async (event) => {
         if (!(event.target instanceof Element)) return;
 
-        const semSave = event.target.closest("#ksb-semester-save");
-        if (semSave instanceof HTMLElement) {
-            const dateInput = document.querySelector("#ksb-semester-start-input");
-            if (dateInput) {
-                await ksbSetSemesterStart(dateInput.value);
-                setCopyStatus("Date saved!");
-                renderTimetable();
-            }
-            return;
-        }
 
         const themeToggle = event.target.closest("[data-ksb-toggle-theme]");
         if (themeToggle instanceof HTMLElement) {
@@ -331,13 +321,6 @@ function ensureModalShell() {
             
             if (action === "copy-reg-codes") {
                 await handleCopyAction("codes");
-            } else if (action === "export-gcal") {
-                const res = await ksbExportToGoogleCalendar(subjects);
-                if (res.error) alert(res.error);
-                else setCopyStatus(`Opened ${res.count} calendar tabs`);
-            } else if (action === "export-ics") {
-                await ksbExportToIcal(subjects);
-                setCopyStatus("iCal file downloaded");
             } else if (action === "copy-share-link") {
                 const link = ksbEncodeShareLink(subjects);
                 if (link) {
@@ -1294,16 +1277,6 @@ async function renderSelectedSubjectPanel() {
     const creditContainer = document.querySelector("#ksb-header-credits");
     if (creditContainer) creditContainer.innerHTML = ksbRenderCreditCounter(selectedSubjects);
 
-    // Update semester picker
-    const semStart = await ksbGetSemesterStart();
-    const semContainer = document.querySelector("#ksb-semester-picker-container");
-    if (semContainer) {
-        const currentInput = semContainer.querySelector("#ksb-semester-start-input");
-        // Only update if the input is not currently focused (to avoid losing cursor/focus while typing)
-        if (!currentInput || document.activeElement !== currentInput) {
-            semContainer.innerHTML = ksbRenderSemesterDatePicker(semStart);
-        }
-    }
 
     // Offline banner
     const offlineContainer = document.querySelector("#ksb-offline-banner-container");
@@ -1338,34 +1311,12 @@ async function renderSelectedSubjectPanel() {
 }
 
 
-async function handleGCalExport() {
-    const subjects = latestSelectedSubjects;
-    const res = await ksbExportToGoogleCalendar(subjects);
-    if (res.error) alert(res.error);
-    else setCopyStatus(`Opened ${res.count} tabs`);
-}
-
-async function handleIcalExport() {
-    const subjects = latestSelectedSubjects;
-    const res = await ksbExportToIcal(subjects);
-    if (res.error) alert(res.error);
-    else setCopyStatus("iCal downloaded");
-}
-
 async function handlePanelAction(action, button) {
     const subjects = latestSelectedSubjects;
     if (action === 'copy-reg-codes') {
         const codes = [...new Set(subjects.map(s => ksbGetSubjectDisplayCode(s)))].filter(Boolean).join('\n');
         await copyTextToClipboard(codes);
         setCopyStatus("Codes copied!");
-    } else if (action === 'export-gcal') {
-        const res = await ksbExportToGoogleCalendar(subjects);
-        if (res.error) alert(res.error);
-        else setCopyStatus(`Opened ${res.count} tabs`);
-    } else if (action === 'export-ics') {
-        const res = await ksbExportToIcal(subjects);
-        if (res.error) alert(res.error);
-        else setCopyStatus("iCal downloaded");
     } else if (action === 'copy-share-link') {
         const link = ksbEncodeShareLink(subjects);
         if (link) {
