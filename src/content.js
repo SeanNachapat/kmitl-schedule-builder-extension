@@ -1,70 +1,4 @@
-const STORAGE_KEY = "kmitl_schedule_builder_selected_subjects";
-const EXTENSION_FLAG = "data-kmitl-schedule-builder-processed";
-const EXTENSION_PROCESSED_VALUE = "true";
-const CHECKBOX_WRAPPER_SELECTOR = ".ksb-checkbox-wrapper";
-const EXTENSION_STYLE_ID = "kmitl-schedule-builder-style";
-const ROUTE_CHECK_INTERVAL_MS = 250;
-const SUBJECT_CARD_CANDIDATE_SELECTOR = "div, li, article, section";
-const SUBJECT_ID_PATTERN = /\b\d{8}\b/;
-const TIME_RANGE_PATTERN = /(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/;
-const SECTION_PATTERN = /section\s*\(([^)]+)\)/i;
-const DEBUG_PARSING = false;
-const SUBJECT_TABLE_COLUMNS = {
-    subjectCode: 0,
-    subjectName: 1,
-    credits: 2,
-    group: 3,
-    classTime: 4,
-    room: 5,
-    building: 6,
-    teacher: 7,
-    examInfo: 8,
-    condition: 9,
-    note: 10,
-    capacity: 11,
-    enrolled: 12,
-    queue: 13,
-    registered: 14,
-};
-const THAI_DAY_MAP = {
-    "จันทร์": "Mon",
-    "อังคาร": "Tue",
-    "พุธ": "Wed",
-    "พฤหัสบดี": "Thu",
-    "ศุกร์": "Fri",
-    "เสาร์": "Sat",
-    "อาทิตย์": "Sun",
-};
-const DAY_KEY_MAP = {
-    mon: "Mon",
-    monday: "Mon",
-    tue: "Tue",
-    tuesday: "Tue",
-    wed: "Wed",
-    wednesday: "Wed",
-    thu: "Thu",
-    thursday: "Thu",
-    fri: "Fri",
-    friday: "Fri",
-    sat: "Sat",
-    saturday: "Sat",
-    sun: "Sun",
-    sunday: "Sun",
-};
-const TIMETABLE_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TIMETABLE_DAY_LABELS = {
-    Mon: "Mon",
-    Tue: "Tue",
-    Wed: "Wed",
-    Thu: "Thu",
-    Fri: "Fri",
-    Sat: "Sat",
-    Sun: "Sun",
-};
-const TIMETABLE_START_MINUTE = 8 * 60;
-const TIMETABLE_END_MINUTE = 23 * 60;
-const TIMETABLE_SLOT_MINUTES = 30;
-const TIMETABLE_FIRST_SLOT_COLUMN = 2;
+// Constants and utilities are now provided by src/utils.js
 let pageScanScheduled = false;
 let pageScanTimer = null;
 let routeCheckTimer = null;
@@ -79,41 +13,44 @@ let latestSelectedSubjects = [];
 let isPanelCollapsed = true;
 let showSubjectGroups = false;
 let showSelectedList = false;
-const DEBUG_UI = false;
 
-function renderIcon(name) {
-    const icons = {
-        calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
-        refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>`,
-        clear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
-        close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-        copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
-        download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
-        groups: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`,
-        list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`,
-        warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
-        conflict: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
-        info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`,
-        selected: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
-        open: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 22 3 22 10"></polyline><line x1="10" y1="14" x2="22" y2="2"></line></svg>`,
-    };
 
-    const svg = icons[name] || "";
-    if (!svg) return "";
-
-    return `<span class="ksb-icon" aria-hidden="true">${svg}</span>`;
-}
-
-function init() {
+async function init() {
     window.addEventListener("hashchange", handleRouteChange);
     window.addEventListener("popstate", handleRouteChange);
+    
+    // Initialize new modules
+    try {
+        await ksbInitDarkMode();
+        await ksbInitColorCoding();
+        await ksbInitOffline();
+    } catch (err) {
+        if (KSB_DEBUG_UI) console.warn("[KSB] Module initialization failed:", err);
+    }
+    
+    // Check for shared links
+    const sharedSubjects = ksbDecodeShareFragment();
+    if (sharedSubjects) {
+        if (confirm("Import shared schedule? This will replace your current one.")) {
+            await saveSelectedSubjects(sharedSubjects);
+        }
+    }
+
     startRouteWatcher();
     handleRouteChange();
+    
+    // Listen for messages from popup
+    chrome.runtime.onMessage.addListener((request) => {
+        if (request.action === 'updateTheme') ksbApplyTheme(request.theme);
+        if (request.action === 'exportGCal') handleGCalExport();
+        if (request.action === 'exportICS') handleIcalExport();
+    });
 }
 
 function isTeachTablePage() {
-    return window.location.origin === "https://regis.reg.kmitl.ac.th"
-        && window.location.hash.startsWith("#/teach_table");
+    const isKmitlRegis = window.location.hostname.includes("reg.kmitl.ac.th");
+    const isTeachTable = window.location.hash.includes("teach_table");
+    return isKmitlRegis && isTeachTable;
 }
 
 function handleRouteChange() {
@@ -136,7 +73,7 @@ function startRouteWatcher() {
         }
 
         handleRouteChange();
-    }, ROUTE_CHECK_INTERVAL_MS);
+    }, KSB_ROUTE_CHECK_INTERVAL_MS);
 }
 
 function getCurrentRouteKey() {
@@ -147,8 +84,8 @@ function hasScheduleBuilderUi() {
     return Boolean(
         document.querySelector("#kmitl-schedule-builder-launcher") ||
         document.querySelector("#kmitl-schedule-builder-modal-overlay") ||
-        document.querySelector(CHECKBOX_WRAPPER_SELECTOR) ||
-        document.querySelector(`#${EXTENSION_STYLE_ID}`) ||
+        document.querySelector(KSB_CHECKBOX_WRAPPER_SELECTOR) ||
+        document.querySelector(`#${KSB_EXTENSION_STYLE_ID}`) ||
         document.documentElement.classList.contains("ksb-modal-is-open")
     );
 }
@@ -174,10 +111,10 @@ function initializeScheduleBuilder() {
 }
 
 function injectExtensionStyles() {
-    if (document.querySelector(`#${EXTENSION_STYLE_ID}`)) return;
+    if (document.querySelector(`#${KSB_EXTENSION_STYLE_ID}`)) return;
 
     const styleLink = document.createElement("link");
-    styleLink.id = EXTENSION_STYLE_ID;
+    styleLink.id = KSB_EXTENSION_STYLE_ID;
     styleLink.rel = "stylesheet";
     styleLink.href = chrome.runtime.getURL("src/style.css");
     document.documentElement.appendChild(styleLink);
@@ -208,17 +145,17 @@ function cleanupScheduleBuilderUi() {
     removeScheduleBuilderGlobalListeners();
     document.querySelector("#kmitl-schedule-builder-launcher")?.remove();
     document.querySelector("#kmitl-schedule-builder-modal-overlay")?.remove();
-    document.querySelector(`#${EXTENSION_STYLE_ID}`)?.remove();
+    document.querySelector(`#${KSB_EXTENSION_STYLE_ID}`)?.remove();
 
-    document.querySelectorAll(CHECKBOX_WRAPPER_SELECTOR).forEach((wrapper) => {
-        const owner = wrapper.closest(`[${EXTENSION_FLAG}]`);
-        if (owner) owner.removeAttribute(EXTENSION_FLAG);
+    document.querySelectorAll(KSB_CHECKBOX_WRAPPER_SELECTOR).forEach((wrapper) => {
+        const owner = wrapper.closest(`[${KSB_EXTENSION_FLAG}]`);
+        if (owner) owner.removeAttribute(KSB_EXTENSION_FLAG);
         wrapper.remove();
     });
 
     document
-        .querySelectorAll(`[${EXTENSION_FLAG}="${EXTENSION_PROCESSED_VALUE}"]`)
-        .forEach((element) => element.removeAttribute(EXTENSION_FLAG));
+        .querySelectorAll(`[${KSB_EXTENSION_FLAG}="${KSB_EXTENSION_PROCESSED_VALUE}"]`)
+        .forEach((element) => element.removeAttribute(KSB_EXTENSION_FLAG));
 
     document.documentElement.classList.remove("ksb-modal-is-open");
 }
@@ -269,14 +206,15 @@ function ensureModalShell() {
     <div class="ksb-panel-header">
         <div class="ksb-panel-title">
             <strong>
-                ${renderIcon("calendar")} KMITL Schedule Builder
-                <span class="ksb-attribution">Made by twtae & His beloved AI</span>
+                ${ksbRenderIcon("calendar")} KMITL Schedule Builder
+                <span class="ksb-attribution">v0.3.0 — Enhanced</span>
             </strong>
-            <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">${renderIcon("selected")} Selected: 0</span>
+            <div id="ksb-header-credits"></div>
+            <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">${ksbRenderIcon("selected")} Selected: 0</span>
         </div>
 		<div class="ksb-panel-actions">
-			<button id="ksb-render-button" type="button">${renderIcon("refresh")} Refresh</button>
-			<button id="ksb-clear-button" type="button">${renderIcon("clear")} Clear</button>
+			<button id="ksb-render-button" type="button">${ksbRenderIcon("refresh")} Refresh</button>
+			<button id="ksb-clear-button" type="button">${ksbRenderIcon("clear")} Clear</button>
             <button
                 id="ksb-collapse-button"
                 type="button"
@@ -284,7 +222,7 @@ function ensureModalShell() {
                 aria-label="Hide KMITL Schedule Builder modal"
                 aria-expanded="true"
             >
-                ${renderIcon("close")} Close
+                ${ksbRenderIcon("close")} Close
             </button>
 		</div>
     </div>
@@ -298,7 +236,7 @@ function ensureModalShell() {
                     aria-label="Show subject groups"
                     aria-expanded="false"
                 >
-                    ${renderIcon("groups")} Show Groups
+                    ${ksbRenderIcon("groups")} Show Groups
                 </button>
                 <button
                     class="ksb-section-toggle"
@@ -307,17 +245,21 @@ function ensureModalShell() {
                     aria-label="Show selected classes list"
                     aria-expanded="false"
                 >
-                    ${renderIcon("list")} Show List
+                    ${ksbRenderIcon("list")} Show List
                 </button>
             </div>
         </div>
         <div class="ksb-export-actions">
-            <button class="ksb-export-button" type="button" data-ksb-copy="classes" aria-label="Copy selected classes as plain text">${renderIcon("copy")} Copy Classes</button>
-            <button class="ksb-export-button" type="button" data-ksb-copy="timetable" aria-label="Copy timetable summary as plain text">${renderIcon("calendar")} Copy Timetable</button>
-            <button class="ksb-export-button" type="button" data-ksb-copy="groups" aria-label="Copy subject groups as plain text">${renderIcon("groups")} Copy Groups</button>
-            <button class="ksb-export-button" type="button" data-ksb-download="png" aria-label="Download timetable as PNG">${renderIcon("download")} Download PNG</button>
+            <button class="ksb-export-button" type="button" data-ksb-action="copy-reg-codes" title="Copy codes for registration page">${ksbRenderIcon("register")} Copy codes</button>
+            <button class="ksb-export-button" type="button" data-ksb-action="export-gcal">${ksbRenderIcon("calendar")} GCal</button>
+            <button class="ksb-export-button" type="button" data-ksb-action="export-ics">${ksbRenderIcon("download")} iCal</button>
+            <button class="ksb-export-button" type="button" data-ksb-action="copy-share-link">${ksbRenderIcon("share")} Share Link</button>
+            ${ksbRenderDarkModeToggle()}
             <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
         </div>
+        <div id="ksb-semester-picker-container"></div>
+        <div id="ksb-compare-container"></div>
+        <div id="ksb-offline-banner-container"></div>
         <div id="ksb-timetable"></div>
     </div>
 	`;
@@ -338,9 +280,29 @@ function ensureModalShell() {
     panel.addEventListener("click", async (event) => {
         if (!(event.target instanceof Element)) return;
 
-        const panelToggle = event.target.closest("[data-ksb-toggle-panel]");
-        if (panelToggle instanceof HTMLElement) {
-            closeScheduleBuilderModal();
+        const semSave = event.target.closest("#ksb-semester-save");
+        if (semSave instanceof HTMLElement) {
+            const dateInput = document.querySelector("#ksb-semester-start-input");
+            if (dateInput) {
+                await ksbSetSemesterStart(dateInput.value);
+                setCopyStatus("Date saved!");
+                renderTimetable();
+            }
+            return;
+        }
+
+        const themeToggle = event.target.closest("[data-ksb-toggle-theme]");
+        if (themeToggle instanceof HTMLElement) {
+            await ksbToggleDarkMode();
+            renderTimetable();
+            return;
+        }
+
+        const swapButton = event.target.closest("[data-ksb-swap-from]");
+        if (swapButton instanceof HTMLElement) {
+            const fromId = swapButton.dataset.ksbSwapFrom;
+            const toSubject = JSON.parse(swapButton.dataset.ksbSwapTo);
+            await handleSwapAction(fromId, toSubject);
             return;
         }
 
@@ -400,14 +362,16 @@ async function injectCheckboxesIntoSubjectCards() {
         const selectedSubjects = await getSelectedSubjects();
         if (!isTeachTablePage()) return;
 
+        ksbSetAllParsedRows(cards.map(c => parseSubjectElement(c)).filter(Boolean));
+        
         cards.forEach((card) => {
-            if (card.hasAttribute(EXTENSION_FLAG)) return;
-            if (card.querySelector(CHECKBOX_WRAPPER_SELECTOR)) return;
+            if (card.hasAttribute(KSB_EXTENSION_FLAG)) return;
+            if (card.querySelector(KSB_CHECKBOX_WRAPPER_SELECTOR)) return;
 
             const subject = parseSubjectElement(card);
             if (!subject) return;
 
-            card.setAttribute(EXTENSION_FLAG, EXTENSION_PROCESSED_VALUE);
+            card.setAttribute(KSB_EXTENSION_FLAG, KSB_EXTENSION_PROCESSED_VALUE);
 
             const checkboxWrapper = document.createElement("label");
             checkboxWrapper.className = "ksb-checkbox-wrapper";
@@ -457,7 +421,7 @@ function schedulePageScan() {
 function findSubjectCards() {
     /*
      * Detection is intentionally centralized here. After inspecting the real
-     * KMITL DOM, update findSubjectRows or SUBJECT_CARD_CANDIDATE_SELECTOR here.
+     * KMITL DOM, update findSubjectRows or KSB_SUBJECT_CARD_CANDIDATE_SELECTOR here.
      *
      * The fallback stays text-based:
      * - visible text contains section(...)
@@ -472,7 +436,7 @@ function findSubjectCards() {
         return rows;
     }
 
-    const candidates = [...document.querySelectorAll(SUBJECT_CARD_CANDIDATE_SELECTOR)]
+    const candidates = [...document.querySelectorAll(KSB_SUBJECT_CARD_CANDIDATE_SELECTOR)]
         .filter((element) => element instanceof HTMLElement)
         .filter((element) => !isInsideScheduleBuilderUi(element))
         .filter(isLikelySubjectCard);
@@ -510,20 +474,18 @@ function isLikelySubjectRow(row) {
     if (row.classList.contains("table-space-tr")) return false;
 
     const cells = getDirectTableCells(row);
-    if (cells.length <= SUBJECT_TABLE_COLUMNS.registered) return false;
+    // Relax column count requirement (at least 8 columns should be enough for basic parsing)
+    if (cells.length < 8) return false;
 
-    const subjectCode = getCellText(row, SUBJECT_TABLE_COLUMNS.subjectCode);
-    const subjectName = getCellText(row, SUBJECT_TABLE_COLUMNS.subjectName);
-    const groupCell = getCellText(row, SUBJECT_TABLE_COLUMNS.group);
-    const classTime = getCellText(row, SUBJECT_TABLE_COLUMNS.classTime);
-    const schedule = parseClassScheduleText(classTime);
+    const subjectCode = getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.subjectCode);
+    const subjectName = getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.subjectName);
+    
+    // More flexible ID pattern: 7-10 digits
+    const flexibleIdPattern = /\b\d{7,10}\b/;
 
     return (
-        SUBJECT_ID_PATTERN.test(subjectCode) &&
-        Boolean(subjectName) &&
-        Boolean(extractSectionFromGroupCell(groupCell)) &&
-        Boolean(schedule.startTime) &&
-        Boolean(schedule.endTime)
+        flexibleIdPattern.test(subjectCode) &&
+        Boolean(subjectName)
     );
 }
 
@@ -541,8 +503,8 @@ function hasSubjectCardParent(element, candidates) {
 
 function hasFallbackSubjectCardText(element) {
     const text = element.innerText || "";
-    const hasSection = SECTION_PATTERN.test(text);
-    const hasTime = TIME_RANGE_PATTERN.test(text);
+    const hasSection = KSB_SECTION_PATTERN.test(text);
+    const hasTime = KSB_TIME_RANGE_PATTERN.test(text);
 
     return hasSection && hasTime;
 }
@@ -576,31 +538,31 @@ function parseSubjectElement(element) {
 
 function parseSubjectRow(row) {
     const rawText = row.innerText || "";
-    const groupCell = getCellText(row, SUBJECT_TABLE_COLUMNS.group);
-    const schedule = parseClassScheduleText(getCellText(row, SUBJECT_TABLE_COLUMNS.classTime));
+    const groupCell = getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.group);
+    const schedule = parseClassScheduleText(getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.classTime));
 
     if (!schedule.startTime || !schedule.endTime) return null;
 
     const subject = createParsedSubject({
-        subjectCode: extractSubjectCode(getCellText(row, SUBJECT_TABLE_COLUMNS.subjectCode)),
-        subjectName: getCellText(row, SUBJECT_TABLE_COLUMNS.subjectName),
-        credits: getCellText(row, SUBJECT_TABLE_COLUMNS.credits),
+        subjectCode: extractSubjectCode(getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.subjectCode)),
+        subjectName: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.subjectName),
+        credits: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.credits),
         section: extractSectionFromGroupCell(groupCell),
         classType: extractClassTypeFromGroupCell(groupCell),
         day: schedule.day,
         dayText: schedule.dayText,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
-        room: getCellText(row, SUBJECT_TABLE_COLUMNS.room),
-        building: getCellText(row, SUBJECT_TABLE_COLUMNS.building),
-        teacher: getCellText(row, SUBJECT_TABLE_COLUMNS.teacher),
-        examInfo: extractExamInfo(getCellText(row, SUBJECT_TABLE_COLUMNS.examInfo)),
-        condition: getCellText(row, SUBJECT_TABLE_COLUMNS.condition),
-        note: getCellText(row, SUBJECT_TABLE_COLUMNS.note),
-        capacity: getCellText(row, SUBJECT_TABLE_COLUMNS.capacity),
-        enrolled: getCellText(row, SUBJECT_TABLE_COLUMNS.enrolled),
-        queue: getCellText(row, SUBJECT_TABLE_COLUMNS.queue),
-        registered: getCellText(row, SUBJECT_TABLE_COLUMNS.registered),
+        room: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.room),
+        building: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.building),
+        teacher: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.teacher),
+        examInfo: extractExamInfo(getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.examInfo)),
+        condition: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.condition),
+        note: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.note),
+        capacity: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.capacity),
+        enrolled: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.enrolled),
+        queue: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.queue),
+        registered: getCellText(row, KSB_SUBJECT_TABLE_COLUMNS.registered),
         rawText,
     });
 
@@ -648,25 +610,25 @@ function parseSubjectCard(card) {
 function createParsedSubject(subject) {
     return {
         id: "",
-        subjectCode: normalizeWhitespace(subject.subjectCode),
-        subjectName: normalizeWhitespace(subject.subjectName),
-        credits: normalizeWhitespace(subject.credits),
-        section: normalizeWhitespace(subject.section),
+        subjectCode: ksbNormalizeWhitespace(subject.subjectCode),
+        subjectName: ksbNormalizeWhitespace(subject.subjectName),
+        credits: ksbNormalizeWhitespace(subject.credits),
+        section: ksbNormalizeWhitespace(subject.section),
         classType: subject.classType || "unknown",
-        day: normalizeDayKey(subject.day),
-        dayText: normalizeWhitespace(subject.dayText),
-        startTime: normalizeWhitespace(subject.startTime),
-        endTime: normalizeWhitespace(subject.endTime),
-        room: normalizeWhitespace(subject.room),
-        building: normalizeWhitespace(subject.building),
-        teacher: normalizeWhitespace(subject.teacher),
-        examInfo: normalizeWhitespace(subject.examInfo),
-        condition: normalizeWhitespace(subject.condition),
-        note: normalizeWhitespace(subject.note),
-        capacity: normalizeWhitespace(subject.capacity),
-        enrolled: normalizeWhitespace(subject.enrolled),
-        queue: normalizeWhitespace(subject.queue),
-        registered: normalizeWhitespace(subject.registered),
+        day: ksbNormalizeDayKey(subject.day),
+        dayText: ksbNormalizeWhitespace(subject.dayText),
+        startTime: ksbNormalizeWhitespace(subject.startTime),
+        endTime: ksbNormalizeWhitespace(subject.endTime),
+        room: ksbNormalizeWhitespace(subject.room),
+        building: ksbNormalizeWhitespace(subject.building),
+        teacher: ksbNormalizeWhitespace(subject.teacher),
+        examInfo: ksbNormalizeWhitespace(subject.examInfo),
+        condition: ksbNormalizeWhitespace(subject.condition),
+        note: ksbNormalizeWhitespace(subject.note),
+        capacity: ksbNormalizeWhitespace(subject.capacity),
+        enrolled: ksbNormalizeWhitespace(subject.enrolled),
+        queue: ksbNormalizeWhitespace(subject.queue),
+        registered: ksbNormalizeWhitespace(subject.registered),
         rawText: subject.rawText || "",
     };
 }
@@ -674,7 +636,7 @@ function createParsedSubject(subject) {
 function extractSubjectName(text) {
     const lines = text
         .split("\n")
-        .map(normalizeWhitespace)
+        .map(ksbNormalizeWhitespace)
         .filter(Boolean);
 
     const subjectLine = lines.find((line) => {
@@ -689,29 +651,29 @@ function extractSubjectName(text) {
 }
 
 function extractSubjectCode(text) {
-    const subjectIdMatch = text.match(SUBJECT_ID_PATTERN);
+    const subjectIdMatch = text.match(KSB_SUBJECT_ID_PATTERN);
     return subjectIdMatch ? subjectIdMatch[0] : "";
 }
 
 function extractSection(text) {
-    const explicitSectionMatch = text.match(SECTION_PATTERN);
+    const explicitSectionMatch = text.match(KSB_SECTION_PATTERN);
     if (explicitSectionMatch) return explicitSectionMatch[1];
 
     const lineSection = text
         .split("\n")
-        .map(normalizeWhitespace)
+        .map(ksbNormalizeWhitespace)
         .find((line) => /^\d+[A-Z]?(?:\s*\([^)]+\))?$/i.test(line));
 
     return lineSection || "";
 }
 
 function extractSectionFromGroupCell(value) {
-    const sectionMatch = normalizeWhitespace(value).match(/\d+[A-Z]?/i);
+    const sectionMatch = ksbNormalizeWhitespace(value).match(/\d+[A-Z]?/i);
     return sectionMatch ? sectionMatch[0] : "";
 }
 
 function extractClassTypeFromGroupCell(value) {
-    const normalizedText = normalizeWhitespace(value).toLowerCase();
+    const normalizedText = ksbNormalizeWhitespace(value).toLowerCase();
 
     if (/ทฤษฎี|lecture|theory/.test(normalizedText)) return "theory";
     if (/ปฏิบัติ|lab|practical/.test(normalizedText)) return "practical";
@@ -721,7 +683,7 @@ function extractClassTypeFromGroupCell(value) {
 }
 
 function extractClassType(text) {
-    const normalizedText = normalizeWhitespace(text).toLowerCase();
+    const normalizedText = ksbNormalizeWhitespace(text).toLowerCase();
 
     if (/ทฤษฎี|lecture|theory/.test(normalizedText)) return "theory";
     if (/ปฏิบัติ|lab|practical/.test(normalizedText)) return "practical";
@@ -731,7 +693,7 @@ function extractClassType(text) {
 }
 
 function extractTimeRange(text) {
-    const timeMatch = text.match(TIME_RANGE_PATTERN);
+    const timeMatch = text.match(KSB_TIME_RANGE_PATTERN);
 
     return {
         startTime: timeMatch ? timeMatch[1] : "",
@@ -740,12 +702,12 @@ function extractTimeRange(text) {
 }
 
 function parseClassScheduleText(value) {
-    const text = normalizeWhitespace(value);
+    const text = ksbNormalizeWhitespace(value);
     const timeRange = extractTimeRange(text);
     const dayText = extractThaiDayText(text);
 
     return {
-        day: normalizeThaiDayToKey(dayText),
+        day: ksbNormalizeThaiDayToKey(dayText),
         dayText,
         startTime: timeRange.startTime,
         endTime: timeRange.endTime,
@@ -753,36 +715,22 @@ function parseClassScheduleText(value) {
 }
 
 function extractThaiDayText(value) {
-    const text = normalizeWhitespace(value);
+    const text = ksbNormalizeWhitespace(value);
 
-    return Object.keys(THAI_DAY_MAP).find((thaiDay) => {
+    return Object.keys(KSB_THAI_DAY_MAP).find((thaiDay) => {
         return text.includes(thaiDay) || text.includes(`วัน${thaiDay}`);
     }) || "";
 }
 
-function normalizeThaiDayToKey(dayText) {
-    const normalizedDayText = normalizeWhitespace(dayText).replace(/^วัน/, "");
-    return THAI_DAY_MAP[normalizedDayText] || "";
-}
-
-function normalizeDayKey(value) {
-    const normalizedValue = normalizeWhitespace(value);
-    if (!normalizedValue) return "";
-
-    const thaiDayKey = normalizeThaiDayToKey(normalizedValue);
-    if (thaiDayKey) return thaiDayKey;
-
-    return DAY_KEY_MAP[normalizedValue.toLowerCase()] || "";
-}
 
 function extractExamInfo(value) {
-    return normalizeWhitespace(value);
+    return ksbNormalizeWhitespace(value);
 }
 
 function extractRoom(text) {
     const lines = text
         .split("\n")
-        .map(normalizeWhitespace)
+        .map(ksbNormalizeWhitespace)
         .filter(Boolean);
 
     return (
@@ -800,7 +748,7 @@ function extractRoom(text) {
 function extractTeacher(text) {
     const lines = text
         .split("\n")
-        .map(normalizeWhitespace)
+        .map(ksbNormalizeWhitespace)
         .filter(Boolean);
 
     const teacherLine = lines.find((line) => {
@@ -822,12 +770,9 @@ function getDirectTableCells(row) {
 
 function getCellText(row, columnIndex) {
     const cells = getDirectTableCells(row);
-    return normalizeWhitespace(cells[columnIndex]?.innerText || "");
+    return ksbNormalizeWhitespace(cells[columnIndex]?.innerText || "");
 }
 
-function normalizeWhitespace(value) {
-    return String(value || "").replace(/\s+/g, " ").trim();
-}
 
 function createStableSubjectId(subject) {
     /*
@@ -844,19 +789,14 @@ function createStableSubjectId(subject) {
         subject.room,
         subject.building,
     ]
-        .map(normalizeSubjectIdPart)
+        .map(ksbNormalizeSubjectIdPart)
         .filter(Boolean)
         .join("|");
 }
 
-function normalizeSubjectIdPart(value) {
-    return normalizeWhitespace(value || "")
-        .toLowerCase()
-        .replace(/[|]/g, "/");
-}
 
 function debugLogParsedSubject(subject) {
-    if (!DEBUG_PARSING) return;
+    if (!KSB_DEBUG_PARSING) return;
     console.debug("[KSB] Parsed subject", subject);
 }
 
@@ -876,7 +816,7 @@ async function toggleSelectedSubject(subject, checked) {
         // chrome.storage may throw 'Extension context invalidated' if the
         // extension is being reloaded/unloaded. Fail gracefully and keep
         // selected subjects in memory.
-        if (DEBUG_UI) console.warn("[KSB] saveSelectedSubjects failed:", err);
+        if (KSB_DEBUG_UI) console.warn("[KSB] saveSelectedSubjects failed:", err);
         latestSelectedSubjects = normalizeSelectedSubjects(nextSubjects);
     }
 }
@@ -885,8 +825,8 @@ async function getSelectedSubjects() {
     // Prefer chrome.storage.local, but gracefully fall back to localStorage
     try {
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.get) {
-            const result = await chrome.storage.local.get(STORAGE_KEY);
-            const selectedSubjects = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+            const result = await chrome.storage.local.get(KSB_STORAGE_KEY);
+            const selectedSubjects = Array.isArray(result[KSB_STORAGE_KEY]) ? result[KSB_STORAGE_KEY] : [];
             const normalizedSubjects = normalizeSelectedSubjects(selectedSubjects);
 
             if (normalizedSubjects.length !== selectedSubjects.length) {
@@ -894,23 +834,23 @@ async function getSelectedSubjects() {
                 try {
                     await saveSelectedSubjects(normalizedSubjects);
                 } catch (e) {
-                    if (DEBUG_UI) console.warn("[KSB] Failed to save normalized subjects:", e);
+                    if (KSB_DEBUG_UI) console.warn("[KSB] Failed to save normalized subjects:", e);
                 }
             }
 
             return normalizedSubjects;
         }
     } catch (err) {
-        if (DEBUG_UI) console.warn("[KSB] chrome.storage.local.get failed:", err);
+        if (KSB_DEBUG_UI) console.warn("[KSB] chrome.storage.local.get failed:", err);
     }
 
     // Fallback to window.localStorage
     try {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
+        const raw = window.localStorage.getItem(KSB_STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : [];
         return normalizeSelectedSubjects(Array.isArray(parsed) ? parsed : []);
     } catch (err) {
-        if (DEBUG_UI) console.warn("[KSB] localStorage.getItem failed:", err);
+        if (KSB_DEBUG_UI) console.warn("[KSB] localStorage.getItem failed:", err);
         return [];
     }
 }
@@ -921,17 +861,17 @@ async function saveSelectedSubjects(subjects) {
     // Try chrome.storage.local first, fallback to localStorage
     try {
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && chrome.storage.local.set) {
-            await chrome.storage.local.set({ [STORAGE_KEY]: normalized });
+            await chrome.storage.local.set({ [KSB_STORAGE_KEY]: normalized });
             return;
         }
     } catch (err) {
-        if (DEBUG_UI) console.warn("[KSB] chrome.storage.local.set failed:", err);
+        if (KSB_DEBUG_UI) console.warn("[KSB] chrome.storage.local.set failed:", err);
     }
 
     try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        window.localStorage.setItem(KSB_STORAGE_KEY, JSON.stringify(normalized));
     } catch (err) {
-        if (DEBUG_UI) console.warn("[KSB] localStorage.setItem failed:", err);
+        if (KSB_DEBUG_UI) console.warn("[KSB] localStorage.setItem failed:", err);
         // As a last resort, keep in-memory (not persisted)
         latestSelectedSubjects = normalized;
     }
@@ -1051,7 +991,7 @@ function updatePanelCollapsedState() {
     overlay.classList.toggle("ksb-modal-overlay--open", !isPanelCollapsed);
     document.documentElement.classList.toggle("ksb-modal-is-open", !isPanelCollapsed);
     overlay.setAttribute("aria-hidden", String(isPanelCollapsed));
-    collapseButton.innerHTML = `${renderIcon("close")} Close`;
+    collapseButton.innerHTML = `${ksbRenderIcon("close")} Close`;
     collapseButton.setAttribute(
         "aria-label",
         "Hide KMITL Schedule Builder modal"
@@ -1079,7 +1019,7 @@ function updateSectionToggleButton(sectionName, label, isVisible) {
     const button = document.querySelector(`[data-ksb-toggle-section="${sectionName}"]`);
     if (!button) return;
 
-    const icon = sectionName === "groups" ? renderIcon("groups") : renderIcon("list");
+    const icon = sectionName === "groups" ? ksbRenderIcon("groups") : ksbRenderIcon("list");
     button.innerHTML = `${icon} ${isVisible ? "Hide" : "Show"} ${label}`;
     button.setAttribute("aria-expanded", String(isVisible));
     button.setAttribute(
@@ -1092,7 +1032,7 @@ function updateSelectedCountDisplay(selectedCount) {
     const compactCountElement = document.querySelector("#ksb-selected-count-compact");
 
     if (compactCountElement) {
-        compactCountElement.innerHTML = `${renderIcon("selected")} Selected: ${selectedCount}`;
+        compactCountElement.innerHTML = `${ksbRenderIcon("selected")} Selected: ${selectedCount}`;
     }
     renderSidebarLauncher(selectedCount);
 }
@@ -1188,7 +1128,7 @@ function updateSidebarLauncherPosition() {
     launcher.style.setProperty("--ksb-launcher-width", `${launcherWidth}px`);
     launcher.style.setProperty("--ksb-launcher-bottom", `${launcherBottom}px`);
 
-    if (DEBUG_UI) {
+    if (KSB_DEBUG_UI) {
         console.debug(
             "[KSB] Launcher position updated:",
             { launcherLeft, launcherWidth, launcherBottom }
@@ -1231,24 +1171,24 @@ function renderSidebarLauncher(selectedCount) {
     launcher.classList.toggle("ksb-sidebar-launcher--open", isOpen);
 
     const buttonText = isOpen ? "Close" : "Show";
-    const buttonIcon = isOpen ? renderIcon("close") : renderIcon("open");
+    const buttonIcon = isOpen ? ksbRenderIcon("close") : ksbRenderIcon("open");
     const buttonAriaLabel = isOpen
         ? "Close KMITL Schedule Builder"
         : "Show KMITL Schedule Builder";
 
     const launcherHtml = `
         <div class="ksb-sidebar-launcher-title">
-            ${renderIcon("calendar")} Schedule Builder
+            ${ksbRenderIcon("calendar")} Schedule Builder
             <span class="ksb-attribution">Made by twtae & His beloved AI</span>
         </div>
-        <div class="ksb-sidebar-launcher-count">${renderIcon("selected")} Selected: ${escapeHtml(selectedCount)}</div>
+        <div class="ksb-sidebar-launcher-count">${ksbRenderIcon("selected")} Selected: ${ksbEscapeHtml(selectedCount)}</div>
         <button
             class="ksb-sidebar-launcher-button"
             type="button"
             data-ksb-open-modal="true"
-            aria-label="${escapeHtml(buttonAriaLabel)}"
+            aria-label="${ksbEscapeHtml(buttonAriaLabel)}"
         >
-            <span class="ksb-sidebar-launcher-button-text ksb-button-content">${buttonIcon} ${escapeHtml(buttonText)}</span>
+            <span class="ksb-sidebar-launcher-button-text ksb-button-content">${buttonIcon} ${ksbEscapeHtml(buttonText)}</span>
         </button>
     `;
 
@@ -1297,15 +1237,64 @@ async function renderSelectedSubjectPanel() {
     const conflicts = getSubjectConflicts(selectedSubjects);
     const conflictingSubjectIds = getConflictingSubjectIds(conflicts);
     const duplicateSelections = getDuplicateSubjectSelections(selectedSubjects);
+    
+    // Update header credits
+    const creditContainer = document.querySelector("#ksb-header-credits");
+    if (creditContainer) creditContainer.innerHTML = ksbRenderCreditCounter(selectedSubjects);
+
+    // Update semester picker
+    const semStart = await ksbGetSemesterStart();
+    const semContainer = document.querySelector("#ksb-semester-picker-container");
+    if (semContainer) semContainer.innerHTML = ksbRenderSemesterDatePicker(semStart);
+
+    // Offline banner
+    const offlineContainer = document.querySelector("#ksb-offline-banner-container");
+    if (offlineContainer) offlineContainer.innerHTML = ksbRenderOfflineBanner();
 
     timetableElement.innerHTML = `
-        ${renderConflictWarnings(conflicts)}
+        ${renderConflictWarnings(conflicts, selectedSubjects)}
         ${renderDuplicateSelectionWarnings(duplicateSelections)}
+        ${ksbRenderCategoryLegend()}
         ${showSubjectGroups ? renderSubjectGroupSummary(selectedSubjects) : ""}
         ${renderTimetableGrid(selectedSubjects, conflictingSubjectIds)}
         ${renderUnplaceableSubjects(selectedSubjects)}
         ${showSelectedList ? renderSelectedSubjectList(selectedSubjects, conflictingSubjectIds) : ""}
     `;
+    
+    // Save to offline cache
+    ksbSaveOfflineCache(selectedSubjects);
+}
+
+async function handlePanelAction(action, button) {
+    const subjects = latestSelectedSubjects;
+    if (action === 'copy-reg-codes') {
+        const codes = [...new Set(subjects.map(s => ksbGetSubjectDisplayCode(s)))].filter(Boolean).join('\n');
+        await ksbCopyTextToClipboard(codes);
+        setCopyStatus("Codes copied!");
+    } else if (action === 'export-gcal') {
+        const res = await ksbExportToGoogleCalendar(subjects);
+        if (res.error) alert(res.error);
+        else setCopyStatus(`Opened ${res.count} tabs`);
+    } else if (action === 'export-ics') {
+        const res = await ksbExportToIcal(subjects);
+        if (res.error) alert(res.error);
+        else setCopyStatus("iCal downloaded");
+    } else if (action === 'copy-share-link') {
+        const link = ksbEncodeShareLink(subjects);
+        if (link) {
+            await ksbCopyTextToClipboard(link);
+            setCopyStatus("Share link copied!");
+        }
+    }
+}
+
+async function handleSwapAction(fromId, toSubject) {
+    const subjects = await getSelectedSubjects();
+    const filtered = subjects.filter(s => s.id !== fromId);
+    const next = [...filtered, toSubject];
+    await saveSelectedSubjects(next);
+    syncAllVisibleCheckboxes(next);
+    renderTimetable();
 }
 
 function renderSelectedSubjectList(subjects, conflictingSubjectIds = new Set()) {
@@ -1319,7 +1308,7 @@ function renderSelectedSubjectList(subjects, conflictingSubjectIds = new Set()) 
 
     return `
     <div class="ksb-selected-subject-list">
-        <div class="ksb-selected-list-title">${renderIcon("list")} Selected classes</div>
+        <div class="ksb-selected-list-title">${ksbRenderIcon("list")} Selected classes</div>
         ${subjects.map((subject) => renderSelectedSubjectCard(subject, conflictingSubjectIds)).join("")}
     </div>
     `;
@@ -1347,7 +1336,7 @@ function renderTimetableHeaderSlots() {
         ${getTimetableSlots()
             .filter((slot) => slot.minutes % 60 === 0)
             .map((slot) => {
-                return `<div class="ksb-timetable-hour" style="grid-column: ${slot.columnStart} / span 2;">${escapeHtml(slot.label)}</div>`;
+                return `<div class="ksb-timetable-hour" style="grid-column: ${slot.columnStart} / span 2;">${ksbEscapeHtml(slot.label)}</div>`;
             })
             .join("")}
     </div>
@@ -1355,14 +1344,14 @@ function renderTimetableHeaderSlots() {
 }
 
 function renderTimetableDayRows(subjects, conflictingSubjectIds = new Set()) {
-    return TIMETABLE_DAYS.map((day) => {
+    return KSB_TIMETABLE_DAYS.map((day) => {
         const daySubjects = subjects.filter((subject) => {
             return getSubjectGridPlacement(subject).day === day;
         });
 
         return `
         <div class="ksb-timetable-row">
-            <div class="ksb-timetable-day">${escapeHtml(TIMETABLE_DAY_LABELS[day])}</div>
+            <div class="ksb-timetable-day">${ksbEscapeHtml(KSB_TIMETABLE_DAY_LABELS[day])}</div>
             ${getTimetableSlots().map(renderTimetableCell).join("")}
             ${daySubjects.map((subject) => renderTimetableSubjectBlock(subject, conflictingSubjectIds)).join("")}
         </div>
@@ -1376,37 +1365,48 @@ function renderTimetableCell(slot) {
 
 function renderTimetableSubjectBlock(subject, conflictingSubjectIds = new Set()) {
     const placement = getSubjectGridPlacement(subject);
-    const location = getSubjectDisplayLocation(subject);
-    const conflictClass = isSubjectConflicting(subject, conflictingSubjectIds)
-        ? " ksb-timetable-block--conflict"
-        : "";
+    const location = ksbGetSubjectDisplayLocation(subject);
+    const catStyle = ksbGetCategoryStyle(ksbGetSubjectDisplayCode(subject));
+    const isConflict = isSubjectConflicting(subject, conflictingSubjectIds);
+    
+    const style = `
+        grid-column: ${placement.columnStart} / span ${placement.columnSpan};
+        --ksb-block-bg: ${ksbGetCurrentTheme() === 'dark' ? catStyle.darkBg : catStyle.bg};
+        --ksb-block-border: ${ksbGetCurrentTheme() === 'dark' ? catStyle.darkBorder : catStyle.border};
+        background: var(--ksb-block-bg);
+        border-color: var(--ksb-block-border);
+        border-left-color: var(--ksb-block-border);
+    `;
 
     return `
     <div
-        class="ksb-timetable-block${conflictClass}"
-        style="grid-column: ${placement.columnStart} / span ${placement.columnSpan};"
-        title="${escapeHtml(getSubjectDisplayName(subject))}"
+        class="ksb-timetable-block${isConflict ? " ksb-timetable-block--conflict" : ""}"
+        style="${style}"
+        title="${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}"
     >
-        <div class="ksb-timetable-block-name">${escapeHtml(getSubjectDisplayName(subject))}</div>
+        <div class="ksb-timetable-block-name">${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}</div>
         <div class="ksb-timetable-block-meta">
-            ${escapeHtml(getSubjectDisplayClassType(subject))}
-            ${subject.section ? ` | section(${escapeHtml(subject.section)})` : ""}
+            ${ksbEscapeHtml(ksbGetSubjectDisplayClassType(subject))}
+            ${subject.section ? ` | section(${ksbEscapeHtml(subject.section)})` : ""}
         </div>
         <div class="ksb-timetable-block-time">
-            ${escapeHtml(getSubjectStartTime(subject))} - ${escapeHtml(getSubjectEndTime(subject))}
+            ${ksbEscapeHtml(ksbGetSubjectStartTime(subject))} - ${ksbEscapeHtml(ksbGetSubjectEndTime(subject))}
         </div>
-        ${location ? `<div class="ksb-timetable-block-location">${escapeHtml(location)}</div>` : ""}
+        ${location ? `<div class="ksb-timetable-block-location">${ksbEscapeHtml(location)}</div>` : ""}
     </div>
     `;
 }
 
-function renderConflictWarnings(conflicts) {
+function renderConflictWarnings(conflicts, selectedSubjects) {
     if (conflicts.length === 0) return "";
 
     return `
     <div class="ksb-conflict-warning">
-        <div class="ksb-conflict-title">${renderIcon("warning")} Schedule conflicts</div>
-        ${conflicts.map(renderConflictItem).join("")}
+        <div class="ksb-conflict-title">${ksbRenderIcon("warning")} Schedule conflicts</div>
+        ${conflicts.map(c => `
+            ${renderConflictItem(c)}
+            ${ksbRenderAlternativeSuggestions(c, selectedSubjects)}
+        `).join("")}
     </div>
     `;
 }
@@ -1414,27 +1414,27 @@ function renderConflictWarnings(conflicts) {
 function renderConflictItem(conflict) {
     const subjectDetails = conflict.subjects.map((subject) => {
         return [
-            getSubjectDisplayCode(subject),
-            getSubjectDisplayName(subject),
+            ksbGetSubjectDisplayCode(subject),
+            ksbGetSubjectDisplayName(subject),
             subject.section ? `section(${subject.section})` : "",
-            getSubjectDisplayClassType(subject),
+            ksbGetSubjectDisplayClassType(subject),
         ].filter(Boolean).join(" ");
     });
 
     return `
     <div class="ksb-conflict-item">
-        <strong>${escapeHtml(conflict.day)} ${escapeHtml(conflict.startTime)} - ${escapeHtml(conflict.endTime)}</strong>
-        <span>${subjectDetails.map(escapeHtml).join(" vs ")}</span>
+        <strong>${ksbEscapeHtml(conflict.day)} ${ksbEscapeHtml(conflict.startTime)} - ${ksbEscapeHtml(conflict.endTime)}</strong>
+        <span>${subjectDetails.map(ksbEscapeHtml).join(" vs ")}</span>
     </div>
     `;
 }
 
 function getSubjectGroupKey(subject) {
-    const subjectCode = normalizeSubjectIdPart(getSubjectDisplayCode(subject));
+    const subjectCode = ksbNormalizeSubjectIdPart(ksbGetSubjectDisplayCode(subject));
     if (subjectCode) return subjectCode;
 
-    const rawSubjectName = normalizeWhitespace(subject.subjectName || subject.name || "");
-    const subjectName = normalizeSubjectIdPart(rawSubjectName);
+    const rawSubjectName = ksbNormalizeWhitespace(subject.subjectName || subject.name || "");
+    const subjectName = ksbNormalizeSubjectIdPart(rawSubjectName);
     return subjectName || "";
 }
 
@@ -1463,8 +1463,8 @@ function getSubjectGroupSummary(subjects) {
             classTypes: getSelectedClassTypesForGroup(groupSubjects),
         }))
         .sort((a, b) => {
-            const firstLabel = getSubjectDisplayCode(a.subjects[0]) || getSubjectDisplayName(a.subjects[0]);
-            const secondLabel = getSubjectDisplayCode(b.subjects[0]) || getSubjectDisplayName(b.subjects[0]);
+            const firstLabel = ksbGetSubjectDisplayCode(a.subjects[0]) || ksbGetSubjectDisplayName(a.subjects[0]);
+            const secondLabel = ksbGetSubjectDisplayCode(b.subjects[0]) || ksbGetSubjectDisplayName(b.subjects[0]);
             return firstLabel.localeCompare(secondLabel);
         });
 }
@@ -1511,9 +1511,9 @@ function hasDuplicateSelectionDifference(subjects) {
     const signatures = new Set(
         subjects.map((subject) => {
             return [
-                normalizeSubjectIdPart(subject.section),
-                normalizeSubjectIdPart(getSubjectStartTime(subject)),
-                normalizeSubjectIdPart(getSubjectEndTime(subject)),
+                ksbNormalizeSubjectIdPart(subject.section),
+                ksbNormalizeSubjectIdPart(ksbGetSubjectStartTime(subject)),
+                ksbNormalizeSubjectIdPart(ksbGetSubjectEndTime(subject)),
             ].join("|");
         })
     );
@@ -1542,7 +1542,7 @@ function renderSubjectGroupSummary(subjects) {
 
     return `
     <div class="ksb-subject-group-summary">
-        <div class="ksb-subject-group-title">${renderIcon("groups")} Subject groups</div>
+        <div class="ksb-subject-group-title">${ksbRenderIcon("groups")} Subject groups</div>
         ${groupSummaries.map(renderSubjectGroup).join("")}
     </div>
     `;
@@ -1550,34 +1550,34 @@ function renderSubjectGroupSummary(subjects) {
 
 function renderSubjectGroup(groupSummary) {
     const representativeSubject = groupSummary.subjects[0];
-    const subjectCode = getSubjectDisplayCode(representativeSubject);
-    const subjectName = getSubjectDisplayName(representativeSubject);
+    const subjectCode = ksbGetSubjectDisplayCode(representativeSubject);
+    const subjectName = ksbGetSubjectDisplayName(representativeSubject);
     const groupHints = getSubjectGroupHints(groupSummary);
 
     return `
     <div class="ksb-subject-group">
         <div class="ksb-subject-group-header">
-            <strong>${escapeHtml(subjectCode || subjectName)}</strong>
-            ${subjectCode ? `<span>${escapeHtml(subjectName)}</span>` : ""}
-            <em>${escapeHtml(String(groupSummary.subjects.length))} selected component${groupSummary.subjects.length === 1 ? "" : "s"}</em>
+            <strong>${ksbEscapeHtml(subjectCode || subjectName)}</strong>
+            ${subjectCode ? `<span>${ksbEscapeHtml(subjectName)}</span>` : ""}
+            <em>${ksbEscapeHtml(String(groupSummary.subjects.length))} selected component${groupSummary.subjects.length === 1 ? "" : "s"}</em>
         </div>
         <div class="ksb-subject-group-components">
             ${groupSummary.subjects.map(renderSubjectGroupComponent).join("")}
         </div>
-        ${groupHints.map((hint) => `<div class="ksb-subject-group-hint">${escapeHtml(hint)}</div>`).join("")}
+        ${groupHints.map((hint) => `<div class="ksb-subject-group-hint">${ksbEscapeHtml(hint)}</div>`).join("")}
     </div>
     `;
 }
 
 function renderSubjectGroupComponent(subject) {
     const details = [
-        getSubjectDisplayClassType(subject),
+        ksbGetSubjectDisplayClassType(subject),
         subject.section ? `section(${subject.section})` : "",
-        getSubjectDisplayDay(subject),
-        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        ksbGetSubjectDisplayDay(subject),
+        [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - "),
     ].filter(Boolean);
 
-    return `<div class="ksb-subject-group-component">${details.map(escapeHtml).join(" | ")}</div>`;
+    return `<div class="ksb-subject-group-component">${details.map(ksbEscapeHtml).join(" | ")}</div>`;
 }
 
 function getSubjectGroupHints(groupSummary) {
@@ -1608,7 +1608,7 @@ function renderDuplicateSelectionWarnings(duplicates) {
 
     return `
     <div class="ksb-duplicate-warning">
-        <div class="ksb-duplicate-title">${renderIcon("info")} Duplicate or alternative selections</div>
+        <div class="ksb-duplicate-title">${ksbRenderIcon("info")} Duplicate or alternative selections</div>
         ${duplicates.map(renderDuplicateSelectionItem).join("")}
     </div>
     `;
@@ -1619,16 +1619,16 @@ function renderDuplicateSelectionItem(duplicate) {
     const duplicateDetails = duplicate.subjects.map((subject) => {
         return [
             subject.section ? `section(${subject.section})` : "",
-            getSubjectDisplayDay(subject),
-            [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" | "),
+            ksbGetSubjectDisplayDay(subject),
+            [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" | "),
         ].filter(Boolean).join(" | ");
     });
 
     return `
     <div class="ksb-duplicate-item">
-        <strong>${escapeHtml(getSubjectDisplayCode(representativeSubject) || getSubjectDisplayName(representativeSubject))}</strong>
-        <span>You selected multiple ${escapeHtml(getSubjectDisplayClassType(representativeSubject))} sections for the same subject. This may be intentional, but usually you only need one.</span>
-        <em>${duplicateDetails.map(escapeHtml).join(" vs ")}</em>
+        <strong>${ksbEscapeHtml(ksbGetSubjectDisplayCode(representativeSubject) || ksbGetSubjectDisplayName(representativeSubject))}</strong>
+        <span>You selected multiple ${ksbEscapeHtml(ksbGetSubjectDisplayClassType(representativeSubject))} sections for the same subject. This may be intentional, but usually you only need one.</span>
+        <em>${duplicateDetails.map(ksbEscapeHtml).join(" vs ")}</em>
     </div>
     `;
 }
@@ -1656,7 +1656,7 @@ async function handleCopyAction(copyType) {
     };
     const config = copyConfig[copyType];
 
-    if (!config || !normalizeWhitespace(config.text)) {
+    if (!config || !ksbNormalizeWhitespace(config.text)) {
         setCopyStatus("Nothing to copy");
         return;
     }
@@ -1727,10 +1727,10 @@ function buildTimetableSummaryText(subjects) {
     const unplaceableSubjects = getUnplaceableSubjects(subjects);
     const lines = ["KMITL Schedule Builder - Timetable Summary", ""];
 
-    TIMETABLE_DAYS.forEach((day) => {
+    KSB_TIMETABLE_DAYS.forEach((day) => {
         const daySubjects = subjectsByDay.get(day) || [];
 
-        lines.push(TIMETABLE_DAY_LABELS[day]);
+        lines.push(KSB_TIMETABLE_DAY_LABELS[day]);
 
         if (daySubjects.length === 0) {
             lines.push("- No selected classes");
@@ -1771,8 +1771,8 @@ function buildSubjectGroupsText(subjects) {
         ...groupSummaries.flatMap((groupSummary) => {
             const representativeSubject = groupSummary.subjects[0];
             const subjectHeader = [
-                getSubjectDisplayCode(representativeSubject),
-                getSubjectDisplayName(representativeSubject),
+                ksbGetSubjectDisplayCode(representativeSubject),
+                ksbGetSubjectDisplayName(representativeSubject),
             ].filter(Boolean).join(" ");
 
             return [
@@ -1785,18 +1785,18 @@ function buildSubjectGroupsText(subjects) {
 }
 
 function getSubjectsSortedByDayAndTime(subjects) {
-    const subjectsByDay = new Map(TIMETABLE_DAYS.map((day) => [day, []]));
+    const subjectsByDay = new Map(KSB_TIMETABLE_DAYS.map((day) => [day, []]));
 
     getPlaceableSubjects(subjects).forEach((subject) => {
         const placement = getSubjectGridPlacement(subject);
         subjectsByDay.get(placement.day).push(subject);
     });
 
-    TIMETABLE_DAYS.forEach((day) => {
+    KSB_TIMETABLE_DAYS.forEach((day) => {
         subjectsByDay.get(day).sort((firstSubject, secondSubject) => {
             return (
-                timeToMinutes(getSubjectStartTime(firstSubject)) -
-                timeToMinutes(getSubjectStartTime(secondSubject))
+                ksbTimeToMinutes(ksbGetSubjectStartTime(firstSubject)) -
+                ksbTimeToMinutes(ksbGetSubjectStartTime(secondSubject))
             );
         });
     });
@@ -1806,47 +1806,47 @@ function getSubjectsSortedByDayAndTime(subjects) {
 
 function formatSelectedClassHeading(subject) {
     return [
-        getSubjectDisplayCode(subject),
-        getSubjectDisplayName(subject),
+        ksbGetSubjectDisplayCode(subject),
+        ksbGetSubjectDisplayName(subject),
     ].filter(Boolean).join(" ");
 }
 
 function formatSubjectTextLine(subject) {
     return [
-        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - "),
         [
-            getSubjectDisplayCode(subject),
-            getSubjectDisplayName(subject),
+            ksbGetSubjectDisplayCode(subject),
+            ksbGetSubjectDisplayName(subject),
         ].filter(Boolean).join(" "),
-        getSubjectDisplayClassType(subject),
+        ksbGetSubjectDisplayClassType(subject),
         subject.section ? `section(${subject.section})` : "",
-        getSubjectDisplayLocation(subject),
+        ksbGetSubjectDisplayLocation(subject),
     ].filter(Boolean).join(" | ");
 }
 
 function formatSubjectDetailedText(subject) {
     return [
-        `Type: ${getSubjectDisplayClassType(subject)}`,
+        `Type: ${ksbGetSubjectDisplayClassType(subject)}`,
         subject.section ? `Section: ${subject.section}` : "",
-        `Time: ${[getSubjectDisplayDay(subject), [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - ")].filter(Boolean).join(" ") || "Unknown"}`,
-        getSubjectDisplayLocation(subject) ? `Room: ${getSubjectDisplayLocation(subject)}` : "",
+        `Time: ${[ksbGetSubjectDisplayDay(subject), [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - ")].filter(Boolean).join(" ") || "Unknown"}`,
+        ksbGetSubjectDisplayLocation(subject) ? `Room: ${ksbGetSubjectDisplayLocation(subject)}` : "",
         subject.teacher ? `Teacher: ${subject.teacher}` : "",
     ].filter(Boolean);
 }
 
 function formatSubjectGroupTextLine(subject) {
     return [
-        getSubjectDisplayClassType(subject),
+        ksbGetSubjectDisplayClassType(subject),
         subject.section ? `section(${subject.section})` : "",
-        getSubjectDisplayDay(subject),
-        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        ksbGetSubjectDisplayDay(subject),
+        [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - "),
     ].filter(Boolean).join(" | ");
 }
 
 function formatConflictText(conflict) {
     const conflictSubjects = conflict.subjects.map((subject) => {
         return [
-            getSubjectDisplayName(subject),
+            ksbGetSubjectDisplayName(subject),
             subject.section ? `section(${subject.section})` : "",
         ].filter(Boolean).join(" ");
     });
@@ -1856,9 +1856,9 @@ function formatConflictText(conflict) {
 
 function formatUnplaceableText(subject) {
     return [
-        getSubjectDisplayName(subject),
+        ksbGetSubjectDisplayName(subject),
         subject.section ? `section(${subject.section})` : "",
-        [getSubjectDisplayDay(subject), [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - ")].filter(Boolean).join(" ") || "Unknown day/time",
+        [ksbGetSubjectDisplayDay(subject), [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - ")].filter(Boolean).join(" ") || "Unknown day/time",
     ].filter(Boolean).join(" | ");
 }
 
@@ -1868,7 +1868,7 @@ function renderUnplaceableSubjects(subjects) {
 
     return `
     <div class="ksb-unplaceable-subjects">
-        <div class="ksb-unplaceable-title">${renderIcon("info")} Cannot place on timetable</div>
+        <div class="ksb-unplaceable-title">${ksbRenderIcon("info")} Cannot place on timetable</div>
         ${unplaceableSubjects.map(renderUnplaceableSubject).join("")}
     </div>
     `;
@@ -1876,15 +1876,15 @@ function renderUnplaceableSubjects(subjects) {
 
 function renderUnplaceableSubject(subject) {
     const details = [
-        getSubjectDisplayDay(subject),
-        [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+        ksbGetSubjectDisplayDay(subject),
+        [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - "),
         subject.section ? `section(${subject.section})` : "",
     ].filter(Boolean);
 
     return `
     <div class="ksb-unplaceable-subject">
-        <strong>${escapeHtml(getSubjectDisplayName(subject))}</strong>
-        ${details.length ? `<span>${details.map(escapeHtml).join(" | ")}</span>` : ""}
+        <strong>${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}</strong>
+        ${details.length ? `<span>${details.map(ksbEscapeHtml).join(" | ")}</span>` : ""}
     </div>
     `;
 }
@@ -1893,16 +1893,16 @@ function getTimetableSlots() {
     const slots = [];
 
     for (
-        let minutes = TIMETABLE_START_MINUTE;
-        minutes < TIMETABLE_END_MINUTE;
-        minutes += TIMETABLE_SLOT_MINUTES
+        let minutes = KSB_TIMETABLE_START_MINUTE;
+        minutes < KSB_TIMETABLE_END_MINUTE;
+        minutes += KSB_TIMETABLE_SLOT_MINUTES
     ) {
         slots.push({
             minutes,
-            label: minutesToTimeLabel(minutes),
+            label: ksbMinutesToTimeLabel(minutes),
             columnStart:
-                TIMETABLE_FIRST_SLOT_COLUMN +
-                (minutes - TIMETABLE_START_MINUTE) / TIMETABLE_SLOT_MINUTES,
+                KSB_TIMETABLE_FIRST_SLOT_COLUMN +
+                (minutes - KSB_TIMETABLE_START_MINUTE) / KSB_TIMETABLE_SLOT_MINUTES,
         });
     }
 
@@ -1925,16 +1925,16 @@ function getSubjectTimeRange(subject) {
     const placement = getSubjectGridPlacement(subject);
     if (!placement.canPlace) return null;
 
-    const startMinutes = timeToMinutes(getSubjectStartTime(subject));
-    const endMinutes = timeToMinutes(getSubjectEndTime(subject));
+    const startMinutes = ksbTimeToMinutes(ksbGetSubjectStartTime(subject));
+    const endMinutes = ksbTimeToMinutes(ksbGetSubjectEndTime(subject));
     if (startMinutes === null || endMinutes === null) return null;
 
     return {
         day: placement.day,
         startMinutes,
         endMinutes,
-        startTime: getSubjectStartTime(subject),
-        endTime: getSubjectEndTime(subject),
+        startTime: ksbGetSubjectStartTime(subject),
+        endTime: ksbGetSubjectEndTime(subject),
     };
 }
 
@@ -1968,8 +1968,8 @@ function getSubjectConflicts(subjects) {
             conflicts.push({
                 id: [firstSubject.id, secondSubject.id].sort().join("|"),
                 day: firstRange.day,
-                startTime: minutesToTimeLabel(startMinutes),
-                endTime: minutesToTimeLabel(endMinutes),
+                startTime: ksbMinutesToTimeLabel(startMinutes),
+                endTime: ksbMinutesToTimeLabel(endMinutes),
                 subjects: [firstSubject, secondSubject],
             });
         }
@@ -1995,19 +1995,19 @@ function isSubjectConflicting(subject, conflictingSubjectIds) {
 }
 
 function getSubjectGridPlacement(subject) {
-    const day = normalizeDayKey(subject.day || subject.dayText);
-    const startMinutes = timeToMinutes(getSubjectStartTime(subject));
-    const endMinutes = timeToMinutes(getSubjectEndTime(subject));
+    const day = ksbNormalizeDayKey(subject.day || subject.dayText);
+    const startMinutes = ksbTimeToMinutes(ksbGetSubjectStartTime(subject));
+    const endMinutes = ksbTimeToMinutes(ksbGetSubjectEndTime(subject));
 
     if (
-        !TIMETABLE_DAYS.includes(day) ||
+        !KSB_TIMETABLE_DAYS.includes(day) ||
         startMinutes === null ||
         endMinutes === null ||
         endMinutes <= startMinutes ||
-        startMinutes < TIMETABLE_START_MINUTE ||
-        endMinutes > TIMETABLE_END_MINUTE ||
-        (startMinutes - TIMETABLE_START_MINUTE) % TIMETABLE_SLOT_MINUTES !== 0 ||
-        (endMinutes - startMinutes) % TIMETABLE_SLOT_MINUTES !== 0
+        startMinutes < KSB_TIMETABLE_START_MINUTE ||
+        endMinutes > KSB_TIMETABLE_END_MINUTE ||
+        (startMinutes - KSB_TIMETABLE_START_MINUTE) % KSB_TIMETABLE_SLOT_MINUTES !== 0 ||
+        (endMinutes - startMinutes) % KSB_TIMETABLE_SLOT_MINUTES !== 0
     ) {
         return { canPlace: false };
     }
@@ -2016,38 +2016,22 @@ function getSubjectGridPlacement(subject) {
         canPlace: true,
         day,
         columnStart:
-            TIMETABLE_FIRST_SLOT_COLUMN +
-            (startMinutes - TIMETABLE_START_MINUTE) / TIMETABLE_SLOT_MINUTES,
-        columnSpan: (endMinutes - startMinutes) / TIMETABLE_SLOT_MINUTES,
+            KSB_TIMETABLE_FIRST_SLOT_COLUMN +
+            (startMinutes - KSB_TIMETABLE_START_MINUTE) / KSB_TIMETABLE_SLOT_MINUTES,
+        columnSpan: (endMinutes - startMinutes) / KSB_TIMETABLE_SLOT_MINUTES,
     };
 }
 
-function timeToMinutes(value) {
-    const timeMatch = normalizeWhitespace(value).match(/^(\d{1,2}):(\d{2})$/);
-    if (!timeMatch) return null;
 
-    const hours = Number(timeMatch[1]);
-    const minutes = Number(timeMatch[2]);
-    if (hours > 23 || minutes > 59) return null;
-
-    return hours * 60 + minutes;
-}
-
-function minutesToTimeLabel(minutes) {
-    const hours = Math.floor(minutes / 60);
-    const minutePart = minutes % 60;
-
-    return `${String(hours).padStart(2, "0")}:${String(minutePart).padStart(2, "0")}`;
-}
 
 function renderSelectedSubjectCard(subject, conflictingSubjectIds = new Set()) {
-    const subjectId = escapeHtml(subject.id || "");
-    const code = getSubjectDisplayCode(subject);
+    const subjectId = ksbEscapeHtml(subject.id || "");
+    const code = ksbGetSubjectDisplayCode(subject);
     const metaParts = getSubjectCardMetaParts(subject)
-        .map(escapeHtml)
+        .map(ksbEscapeHtml)
         .join(" | ");
-    const location = getSubjectDisplayLocation(subject);
-    const teacher = normalizeWhitespace(subject.teacher);
+    const location = ksbGetSubjectDisplayLocation(subject);
+    const teacher = ksbNormalizeWhitespace(subject.teacher);
     const conflictClass = isSubjectConflicting(subject, conflictingSubjectIds)
         ? " ksb-selected-subject--conflict"
         : "";
@@ -2056,8 +2040,8 @@ function renderSelectedSubjectCard(subject, conflictingSubjectIds = new Set()) {
     <div class="ksb-selected-subject${conflictClass}" data-ksb-selected-subject-id="${subjectId}">
         <div class="ksb-selected-subject-top">
             <div class="ksb-selected-subject-title">
-                <div class="ksb-selected-subject-name">${escapeHtml(getSubjectDisplayName(subject))}</div>
-                ${code ? `<div class="ksb-selected-subject-code">${escapeHtml(code)}</div>` : ""}
+                <div class="ksb-selected-subject-name">${ksbEscapeHtml(ksbGetSubjectDisplayName(subject))}</div>
+                ${code ? `<div class="ksb-selected-subject-code">${ksbEscapeHtml(code)}</div>` : ""}
             </div>
             <button
                 class="ksb-remove-subject-button"
@@ -2069,8 +2053,8 @@ function renderSelectedSubjectCard(subject, conflictingSubjectIds = new Set()) {
             </button>
         </div>
         ${metaParts ? `<div class="ksb-selected-subject-meta">${metaParts}</div>` : ""}
-        ${location ? `<div class="ksb-selected-subject-room">${escapeHtml(location)}</div>` : ""}
-        ${teacher ? `<div class="ksb-selected-subject-teacher">${escapeHtml(teacher)}</div>` : ""}
+        ${location ? `<div class="ksb-selected-subject-room">${ksbEscapeHtml(location)}</div>` : ""}
+        ${teacher ? `<div class="ksb-selected-subject-teacher">${ksbEscapeHtml(teacher)}</div>` : ""}
     </div>
     `;
 }
@@ -2101,66 +2085,20 @@ function syncAllVisibleCheckboxes(selectedSubjects) {
 }
 
 function getSubjectCardMetaParts(subject) {
-    const timeRange = [getSubjectStartTime(subject), getSubjectEndTime(subject)]
+    const timeRange = [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)]
         .filter(Boolean)
         .join(" - ");
 
     return [
         subject.credits,
         subject.section ? `section(${subject.section})` : "",
-        getSubjectDisplayClassType(subject),
-        getSubjectDisplayDay(subject),
+        ksbGetSubjectDisplayClassType(subject),
+        ksbGetSubjectDisplayDay(subject),
         timeRange,
     ].filter(Boolean);
 }
 
-function getSubjectDisplayCode(subject) {
-    return subject.subjectCode || subject.code || "";
-}
 
-function getSubjectDisplayName(subject) {
-    return subject.subjectName || subject.name || "Unknown Subject";
-}
-
-function getSubjectDisplayClassType(subject) {
-    const classType = subject.classType || subject.type || "unknown";
-    const labels = {
-        theory: "ทฤษฎี",
-        practical: "ปฏิบัติ",
-        seminar: "สัมมนา",
-        "ทฤษฎี": "ทฤษฎี",
-        "ปฏิบัติ": "ปฏิบัติ",
-        "สัมมนา": "สัมมนา",
-        unknown: "ไม่ทราบประเภท",
-    };
-
-    return labels[classType] || labels.unknown;
-}
-
-function getSubjectDisplayDay(subject) {
-    return subject.dayText || subject.day || "";
-}
-
-function getSubjectStartTime(subject) {
-    return subject.startTime || subject.start || "";
-}
-
-function getSubjectEndTime(subject) {
-    return subject.endTime || subject.end || "";
-}
-
-function getSubjectDisplayLocation(subject) {
-    return [subject.room, subject.building].filter(Boolean).join(" / ");
-}
-
-function escapeHtml(value) {
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
 
 async function handleDownloadPngAction() {
     const selectedSubjects = latestSelectedSubjects;
@@ -2223,7 +2161,7 @@ function getTimetableCanvasLayout(subjects) {
     }
 
     const logicalWidth = margin * 2 + dayLabelWidth + slots.length * slotWidth;
-    const logicalHeight = margin * 2 + titleHeight + headerHeight + TIMETABLE_DAYS.length * rowHeight + unplaceableSectionHeight;
+    const logicalHeight = margin * 2 + titleHeight + headerHeight + KSB_TIMETABLE_DAYS.length * rowHeight + unplaceableSectionHeight;
 
     return {
         scale,
@@ -2242,10 +2180,10 @@ function getTimetableCanvasLayout(subjects) {
 
 function getCanvasTimeSlots() {
     const slots = [];
-    for (let minutes = TIMETABLE_START_MINUTE; minutes < TIMETABLE_END_MINUTE; minutes += TIMETABLE_SLOT_MINUTES) {
+    for (let minutes = KSB_TIMETABLE_START_MINUTE; minutes < KSB_TIMETABLE_END_MINUTE; minutes += KSB_TIMETABLE_SLOT_MINUTES) {
         slots.push({
             minutes,
-            label: minutes % 60 === 0 ? minutesToTimeLabel(minutes) : ""
+            label: minutes % 60 === 0 ? ksbMinutesToTimeLabel(minutes) : ""
         });
     }
     return slots;
@@ -2301,7 +2239,7 @@ function drawTimetableGridLines(ctx, layout) {
     const startX = layout.margin + layout.dayLabelWidth;
     const startY = layout.margin + layout.titleHeight;
     const gridWidth = layout.slots.length * layout.slotWidth;
-    const gridHeight = TIMETABLE_DAYS.length * layout.rowHeight;
+    const gridHeight = KSB_TIMETABLE_DAYS.length * layout.rowHeight;
 
     ctx.fillStyle = "#f0f0f0";
     ctx.fillRect(layout.margin, startY, layout.dayLabelWidth + gridWidth, layout.headerHeight);
@@ -2316,8 +2254,8 @@ function drawTimetableGridLines(ctx, layout) {
     ctx.font = "bold 12px Arial, sans-serif";
     ctx.fillText("Day", layout.margin + layout.dayLabelWidth / 2, startY + layout.headerHeight / 2);
 
-    for (let i = 0; i < TIMETABLE_DAYS.length; i++) {
-        const day = TIMETABLE_DAYS[i];
+    for (let i = 0; i < KSB_TIMETABLE_DAYS.length; i++) {
+        const day = KSB_TIMETABLE_DAYS[i];
         const rowY = startY + layout.headerHeight + i * layout.rowHeight;
         
         ctx.fillStyle = i % 2 === 0 ? "#ffffff" : "#fafafa";
@@ -2333,7 +2271,7 @@ function drawTimetableGridLines(ctx, layout) {
 
         ctx.fillStyle = "#c9471c";
         ctx.font = "bold 12px Arial, sans-serif";
-        ctx.fillText(TIMETABLE_DAY_LABELS[day], layout.margin + layout.dayLabelWidth / 2, rowY + layout.rowHeight / 2);
+        ctx.fillText(KSB_TIMETABLE_DAY_LABELS[day], layout.margin + layout.dayLabelWidth / 2, rowY + layout.rowHeight / 2);
     }
 
     for (let i = 0; i <= layout.slots.length; i++) {
@@ -2394,7 +2332,7 @@ function drawTimetableBlocks(ctx, layout, subjects, conflictingSubjectIds) {
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         
-        const title = getSubjectDisplayName(subject);
+        const title = ksbGetSubjectDisplayName(subject);
         textY = drawWrappedText(ctx, title, textX, textY, w - 16, 14, 2);
         
         textY += 4;
@@ -2403,17 +2341,17 @@ function drawTimetableBlocks(ctx, layout, subjects, conflictingSubjectIds) {
         ctx.font = "10px Arial, sans-serif";
         
         const typeAndSection = [
-            getSubjectDisplayClassType(subject),
+            ksbGetSubjectDisplayClassType(subject),
             subject.section ? `section(${subject.section})` : ""
         ].filter(Boolean).join(" | ");
         ctx.fillText(typeAndSection, textX, textY);
         textY += 14;
 
-        const timeRange = `${getSubjectStartTime(subject)} - ${getSubjectEndTime(subject)}`;
+        const timeRange = `${ksbGetSubjectStartTime(subject)} - ${ksbGetSubjectEndTime(subject)}`;
         ctx.fillText(timeRange, textX, textY);
         textY += 14;
 
-        const location = getSubjectDisplayLocation(subject);
+        const location = ksbGetSubjectDisplayLocation(subject);
         if (location) {
             drawWrappedText(ctx, location, textX, textY, w - 16, 14, 1);
         }
@@ -2439,13 +2377,13 @@ function getSubjectCanvasPlacement(subject, layout) {
     const gridPlacement = getSubjectGridPlacement(subject);
     if (!gridPlacement.canPlace) return null;
 
-    const dayIndex = TIMETABLE_DAYS.indexOf(gridPlacement.day);
+    const dayIndex = KSB_TIMETABLE_DAYS.indexOf(gridPlacement.day);
     if (dayIndex === -1) return null;
 
     const startX = layout.margin + layout.dayLabelWidth;
     const startY = layout.margin + layout.titleHeight + layout.headerHeight;
 
-    const colIndex = gridPlacement.columnStart - TIMETABLE_FIRST_SLOT_COLUMN;
+    const colIndex = gridPlacement.columnStart - KSB_TIMETABLE_FIRST_SLOT_COLUMN;
     
     return {
         x: startX + colIndex * layout.slotWidth,
@@ -2455,7 +2393,7 @@ function getSubjectCanvasPlacement(subject, layout) {
 }
 
 function drawTimetableUnplaceable(ctx, layout) {
-    const startY = layout.margin + layout.titleHeight + layout.headerHeight + (TIMETABLE_DAYS.length * layout.rowHeight) + 24;
+    const startY = layout.margin + layout.titleHeight + layout.headerHeight + (KSB_TIMETABLE_DAYS.length * layout.rowHeight) + 24;
     
     ctx.fillStyle = "#c9471c";
     ctx.font = "bold 12px Arial, sans-serif";
@@ -2468,16 +2406,16 @@ function drawTimetableUnplaceable(ctx, layout) {
     
     layout.unplaceableSubjects.forEach(subject => {
         const details = [
-            getSubjectDisplayDay(subject),
-            [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+            ksbGetSubjectDisplayDay(subject),
+            [ksbGetSubjectStartTime(subject), ksbGetSubjectEndTime(subject)].filter(Boolean).join(" - "),
             subject.section ? `section(${subject.section})` : "",
         ].filter(Boolean).join(" | ");
 
         ctx.font = "bold 12px Arial, sans-serif";
-        ctx.fillText(getSubjectDisplayName(subject), layout.margin, textY);
+        ctx.fillText(ksbGetSubjectDisplayName(subject), layout.margin, textY);
         
         if (details) {
-            const titleWidth = ctx.measureText(getSubjectDisplayName(subject) + " ").width;
+            const titleWidth = ctx.measureText(ksbGetSubjectDisplayName(subject) + " ").width;
             ctx.font = "12px Arial, sans-serif";
             ctx.fillStyle = "#666666";
             ctx.fillText(details, layout.margin + titleWidth, textY);

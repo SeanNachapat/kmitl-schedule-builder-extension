@@ -1,3 +1,28 @@
+:root {
+    --ksb-primary: #f15a24;
+    --ksb-primary-dark: #d94a1b;
+    --ksb-primary-light: #fff3ed;
+    --ksb-bg-panel: #ffffff;
+    --ksb-bg-body: #f5f5f5;
+    --ksb-text-main: #333333;
+    --ksb-text-muted: #666666;
+    --ksb-border: #dedede;
+    --ksb-shadow: rgba(0, 0, 0, 0.22);
+    --ksb-conflict: #f59e0b;
+    --ksb-conflict-bg: #fff7ed;
+}
+
+.ksb-theme-dark {
+    --ksb-bg-panel: #1e1e1e;
+    --ksb-bg-body: #121212;
+    --ksb-text-main: #e0e0e0;
+    --ksb-text-muted: #aaaaaa;
+    --ksb-border: #333333;
+    --ksb-shadow: rgba(0, 0, 0, 0.6);
+    --ksb-primary-light: #2c1a14;
+    --ksb-conflict-bg: #2d1a05;
+}
+
 #kmitl-schedule-builder-launcher {
     --ksb-launcher-left: 12px;
     --ksb-launcher-width: 260px;
@@ -736,6 +761,105 @@
     z-index: auto;
 }
 
-.ksb-subject-checkbox {
-    accent-color: #f15a24;
+/* ───────────── New Features Styles ───────────── */
+
+.ksb-credit-counter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--ksb-text-muted);
+}
+
+.ksb-credit-total {
+    font-weight: 700;
+    color: var(--ksb-primary);
+}
+
+.ksb-category-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 8px;
+    background: var(--ksb-bg-panel);
+    border: 1px solid var(--ksb-border);
+    border-radius: 6px;
+    font-size: 11px;
+}
+
+.ksb-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ksb-legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.ksb-alternatives-section {
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--ksb-conflict-bg);
+    border: 1px dashed var(--ksb-conflict);
+    border-radius: 4px;
+}
+
+.ksb-alternatives-label {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.ksb-alternative-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    padding: 2px 0;
+}
+
+.ksb-alternative-swap {
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+    background: var(--ksb-primary) !important;
+    color: white !important;
+    border: none !important;
+}
+
+/* ───────────── Dark Mode Fixes ───────────── */
+
+.ksb-theme-dark #kmitl-schedule-builder-panel {
+    background: var(--ksb-bg-panel);
+    color: var(--ksb-text-main);
+    border-color: var(--ksb-border);
+}
+
+.ksb-theme-dark .ksb-panel-header,
+.ksb-theme-dark .ksb-panel-body {
+    background: var(--ksb-bg-panel);
+    border-color: var(--ksb-border);
+}
+
+.ksb-theme-dark .ksb-timetable-grid {
+    background: var(--ksb-bg-body);
+}
+
+.ksb-theme-dark .ksb-timetable-cell {
+    background: var(--ksb-bg-panel);
+    border-color: var(--ksb-border);
+}
+
+.ksb-theme-dark .ksb-timetable-cell:nth-child(odd) {
+    background: var(--ksb-bg-body);
+}
+
+.ksb-theme-dark .ksb-timetable-day,
+.ksb-theme-dark .ksb-timetable-header {
+    background: var(--ksb-border);
+    color: var(--ksb-text-main);
 }

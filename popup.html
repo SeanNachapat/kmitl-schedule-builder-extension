@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <div class="header">
+            <img src="icons/icon32.png" alt="logo">
+            <h1>KMITL Schedule</h1>
+        </div>
+        
+        <div class="stats-card">
+            <div id="credit-summary">No subjects selected</div>
+        </div>
+
+        <div class="menu">
+            <button id="toggle-dark-mode" class="menu-item">
+                <span class="icon">🌙</span>
+                <span>Dark Mode</span>
+                <span id="theme-status" class="status">Off</span>
+            </button>
+            <button id="quick-gcal" class="menu-item">
+                <span class="icon">📅</span>
+                <span>Sync to Google Calendar</span>
+            </button>
+            <button id="quick-ics" class="menu-item">
+                <span class="icon">📥</span>
+                <span>Download iCal (.ics)</span>
+            </button>
+        </div>
+
+        <div class="footer">
+            <p>Navigate to KMITL Teaching Table to build your schedule.</p>
+        </div>
+    </div>
+    <script src="src/utils.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
