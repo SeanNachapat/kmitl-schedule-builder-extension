@@ -134,7 +134,6 @@ function ensureModalShell() {
     </div>
     <div class="ksb-panel-body">
         <div class="ksb-panel-toolbar">
-            <div id="ksb-selected-count">Selected: 0</div>
             <div class="ksb-section-toggles">
                 <button
                     class="ksb-section-toggle"
@@ -912,10 +911,8 @@ function updateSectionToggleButton(sectionName, label, isVisible) {
 
 function updateSelectedCountDisplay(selectedCount) {
     const countText = `Selected: ${selectedCount}`;
-    const countElement = document.querySelector("#ksb-selected-count");
     const compactCountElement = document.querySelector("#ksb-selected-count-compact");
 
-    if (countElement) countElement.textContent = countText;
     if (compactCountElement) compactCountElement.textContent = countText;
     renderSidebarLauncher(selectedCount);
 }
@@ -2172,9 +2169,16 @@ function drawTimetableGridLines(ctx, layout) {
         const colX = startX + i * layout.slotWidth;
         
         ctx.beginPath();
-        ctx.moveTo(colX, startY);
+        ctx.moveTo(colX, startY + layout.headerHeight);
         ctx.lineTo(colX, startY + layout.headerHeight + gridHeight);
         ctx.stroke();
+
+        if (i % 2 === 0) {
+            ctx.beginPath();
+            ctx.moveTo(colX, startY);
+            ctx.lineTo(colX, startY + layout.headerHeight);
+            ctx.stroke();
+        }
 
         if (i < layout.slots.length) {
             const slot = layout.slots[i];
@@ -2240,14 +2244,22 @@ function drawTimetableBlocks(ctx, layout, subjects, conflictingSubjectIds) {
 
         const location = getSubjectDisplayLocation(subject);
         if (location) {
-            ctx.fillText(location, textX, textY);
+            drawWrappedText(ctx, location, textX, textY, w - 16, 14, 1);
         }
 
         if (isConflict) {
-            ctx.fillStyle = "#d97706";
             ctx.font = "bold 10px Arial, sans-serif";
             const tw = ctx.measureText("Conflict").width;
-            ctx.fillText("Conflict", x + w - tw - 6, y + h - 16);
+            const badgeX = x + w - tw - 12;
+            const badgeY = y + 6;
+            
+            ctx.fillStyle = "#fffbeb";
+            ctx.fillRect(badgeX, badgeY, tw + 8, 16);
+            
+            ctx.fillStyle = "#d97706";
+            ctx.textBaseline = "middle";
+            ctx.fillText("Conflict", badgeX + 4, badgeY + 8);
+            ctx.textBaseline = "top";
         }
     });
 }

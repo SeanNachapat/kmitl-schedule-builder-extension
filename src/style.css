@@ -65,17 +65,15 @@
     align-items: center !important;
     justify-content: center !important;
     width: 100% !important;
-    min-height: 30px !important;
-    padding: 6px 10px !important;
-    border: 1px solid #f15a24 !important;
-    border-radius: 4px !important;
-    background: #ffffff !important;
-    color: #c9471c !important;
+    padding: 8px 12px !important;
+    border: none !important;
+    border-radius: 6px !important;
+    background: #f15a24 !important;
+    color: #ffffff !important;
     font-size: 13px !important;
-    font-weight: 500 !important;
-    line-height: 1.2 !important;
-    text-align: center !important;
+    font-weight: 600 !important;
     cursor: pointer !important;
+    transition: all 0.2s ease !important;
     pointer-events: auto !important;
     opacity: 1 !important;
     visibility: visible !important;
@@ -198,23 +196,50 @@
 .ksb-section-toggle,
 .ksb-remove-subject-button {
     padding: 5px 9px;
-    border: 1px solid #f15a24;
     border-radius: 4px;
-    background: #ffffff;
-    color: #c9471c;
     font-size: 12px;
     line-height: 1.2;
     cursor: pointer;
+    transition: all 0.15s ease;
 }
 
-.ksb-panel-actions button:hover,
+#ksb-render-button {
+    background: #f15a24;
+    border: 1px solid #f15a24;
+    color: #ffffff;
+    font-weight: 600;
+}
+#ksb-render-button:hover {
+    background: #d94a1b;
+    border-color: #d94a1b;
+}
+
+#ksb-clear-button,
+#ksb-collapse-button,
+.ksb-remove-subject-button {
+    background: #ffffff;
+    border: 1px solid #f87171;
+    color: #ef4444;
+}
+#ksb-clear-button:hover,
+#ksb-collapse-button:hover,
+.ksb-remove-subject-button:hover {
+    background: #fef2f2;
+    border-color: #dc2626;
+    color: #b91c1c;
+}
+
+.ksb-export-button,
+.ksb-section-toggle {
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    color: #4b5563;
+}
 .ksb-export-button:hover,
-.ksb-section-toggle:hover,
-.ksb-remove-subject-button:hover,
-.ksb-sidebar-launcher-button:hover {
-    background: #fff3ed !important;
-    border-color: #d84f20 !important;
-    color: #a93a16 !important;
+.ksb-section-toggle:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+    color: #1f2937;
 }
 
 .ksb-panel-actions button:focus-visible,
@@ -244,7 +269,8 @@
 
 .ksb-section-toggle[aria-expanded="true"] {
     background: #fff3ed;
-    color: #a93a16;
+    border-color: #f15a24;
+    color: #c9471c;
 }
 
 .ksb-debug-toggle {
@@ -680,4 +706,32 @@
     .ksb-export-actions {
         align-items: flex-start;
     }
+}
+
+.ksb-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    margin-bottom: 4px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: #f9fafb;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4b5563;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.ksb-checkbox-wrapper:hover {
+    border-color: #f15a24;
+    background: #fff3ed;
+    color: #c9471c;
+}
+
+.ksb-subject-checkbox {
+    margin: 0 !important;
+    cursor: pointer;
 }
