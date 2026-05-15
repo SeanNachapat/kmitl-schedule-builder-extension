@@ -44,7 +44,7 @@ There are two ways to install the extension locally.
 ### Option 1: Download from the release page
 
 1. Go to the [Releases page](https://github.com/twtae/kmitl-schedule-builder-extension/releases).
-2. Download the latest `kmitl-schedule-builder-extension-v*.zip` file.
+2. Download the latest release ZIP, for example `kmitl-schedule-builder-extension-v0.2.0.zip`.
 3. Extract the ZIP file.
 4. Open Google Chrome and navigate to `chrome://extensions`.
 5. Enable "Developer mode" using the toggle in the top-right corner.
@@ -66,10 +66,12 @@ There are two ways to install the extension locally.
 
 ## Usage
 
-1. Navigate to any teaching table page on the KMITL registration site.
-2. Check the "Add" boxes next to the subjects you want to include.
-3. Use the "Schedule Builder" launcher in the bottom-left corner to open the timetable modal.
-4. Review your schedule, check for conflicts, and use the export buttons to save your plan.
+1. Navigate to `https://regis.reg.kmitl.ac.th/#/teach_table_selector`.
+2. Select the term, curriculum, and teaching table options on the KMITL page.
+3. Continue to the teaching table route (`#/teach_table`).
+4. Check the "Add" boxes next to the subjects you want to include.
+5. Use the "Schedule Builder" launcher in the bottom-left corner to open the timetable modal.
+6. Review your schedule, check for conflicts, and use the export buttons to save your plan.
 
 ## Privacy and Safety
 
@@ -92,6 +94,7 @@ This is an unofficial project. It is not affiliated with, endorsed by, or mainta
 - Manifest V3 compliant.
 - Built using Vanilla JavaScript and CSS.
 - No external libraries or remote assets are used.
+- Runs only on the KMITL `#/teach_table` route.
 
 ## Credits
 

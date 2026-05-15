@@ -2,6 +2,8 @@ const STORAGE_KEY = "kmitl_schedule_builder_selected_subjects";
 const EXTENSION_FLAG = "data-kmitl-schedule-builder-processed";
 const EXTENSION_PROCESSED_VALUE = "true";
 const CHECKBOX_WRAPPER_SELECTOR = ".ksb-checkbox-wrapper";
+const EXTENSION_STYLE_ID = "kmitl-schedule-builder-style";
+const ROUTE_CHECK_INTERVAL_MS = 250;
 const SUBJECT_CARD_CANDIDATE_SELECTOR = "div, li, article, section";
 const SUBJECT_ID_PATTERN = /\b\d{8}\b/;
 const TIME_RANGE_PATTERN = /(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/;
@@ -64,6 +66,12 @@ const TIMETABLE_END_MINUTE = 23 * 60;
 const TIMETABLE_SLOT_MINUTES = 30;
 const TIMETABLE_FIRST_SLOT_COLUMN = 2;
 let pageScanScheduled = false;
+let pageScanTimer = null;
+let routeCheckTimer = null;
+let lastRouteKey = "";
+let pageObserver = null;
+let scheduleBuilderInitialized = false;
+let globalListenersAttached = false;
 let checkboxInjectionInProgress = false;
 let checkboxInjectionPending = false;
 let copyStatusTimer = null;
@@ -97,29 +105,152 @@ function renderIcon(name) {
 }
 
 function init() {
-    observePageChanges();
+    window.addEventListener("hashchange", handleRouteChange);
+    window.addEventListener("popstate", handleRouteChange);
+    startRouteWatcher();
+    handleRouteChange();
+}
+
+function isTeachTablePage() {
+    return window.location.origin === "https://regis.reg.kmitl.ac.th"
+        && window.location.hash.startsWith("#/teach_table");
+}
+
+function handleRouteChange() {
+    lastRouteKey = getCurrentRouteKey();
+
+    if (isTeachTablePage()) {
+        initializeScheduleBuilder();
+    } else {
+        cleanupScheduleBuilderUi();
+    }
+}
+
+function startRouteWatcher() {
+    if (routeCheckTimer !== null) return;
+
+    routeCheckTimer = window.setInterval(() => {
+        const routeKey = getCurrentRouteKey();
+        if (routeKey === lastRouteKey && (isTeachTablePage() || !hasScheduleBuilderUi())) {
+            return;
+        }
+
+        handleRouteChange();
+    }, ROUTE_CHECK_INTERVAL_MS);
+}
+
+function getCurrentRouteKey() {
+    return `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function hasScheduleBuilderUi() {
+    return Boolean(
+        document.querySelector("#kmitl-schedule-builder-launcher") ||
+        document.querySelector("#kmitl-schedule-builder-modal-overlay") ||
+        document.querySelector(CHECKBOX_WRAPPER_SELECTOR) ||
+        document.querySelector(`#${EXTENSION_STYLE_ID}`) ||
+        document.documentElement.classList.contains("ksb-modal-is-open")
+    );
+}
+
+function initializeScheduleBuilder() {
+    if (!isTeachTablePage()) return;
+
+    injectExtensionStyles();
+
+    if (scheduleBuilderInitialized) {
+        schedulePageScan();
+        injectExtensionUi();
+        return;
+    }
+
+    if (!pageObserver) {
+        observePageChanges();
+    }
+
+    scheduleBuilderInitialized = true;
     injectCheckboxesIntoSubjectCards();
     injectExtensionUi();
 }
 
-function observePageChanges() {
-    const observer = new MutationObserver(() => {
-        schedulePageScan();
+function injectExtensionStyles() {
+    if (document.querySelector(`#${EXTENSION_STYLE_ID}`)) return;
+
+    const styleLink = document.createElement("link");
+    styleLink.id = EXTENSION_STYLE_ID;
+    styleLink.rel = "stylesheet";
+    styleLink.href = chrome.runtime.getURL("src/style.css");
+    document.documentElement.appendChild(styleLink);
+}
+
+function cleanupScheduleBuilderUi() {
+    scheduleBuilderInitialized = false;
+    checkboxInjectionInProgress = false;
+    checkboxInjectionPending = false;
+    pageScanScheduled = false;
+    isPanelCollapsed = true;
+
+    if (pageScanTimer !== null) {
+        window.clearTimeout(pageScanTimer);
+        pageScanTimer = null;
+    }
+
+    if (copyStatusTimer !== null) {
+        window.clearTimeout(copyStatusTimer);
+        copyStatusTimer = null;
+    }
+
+    if (pageObserver) {
+        pageObserver.disconnect();
+        pageObserver = null;
+    }
+
+    removeScheduleBuilderGlobalListeners();
+    document.querySelector("#kmitl-schedule-builder-launcher")?.remove();
+    document.querySelector("#kmitl-schedule-builder-modal-overlay")?.remove();
+    document.querySelector(`#${EXTENSION_STYLE_ID}`)?.remove();
+
+    document.querySelectorAll(CHECKBOX_WRAPPER_SELECTOR).forEach((wrapper) => {
+        const owner = wrapper.closest(`[${EXTENSION_FLAG}]`);
+        if (owner) owner.removeAttribute(EXTENSION_FLAG);
+        wrapper.remove();
     });
 
-    observer.observe(document.body, {
+    document
+        .querySelectorAll(`[${EXTENSION_FLAG}="${EXTENSION_PROCESSED_VALUE}"]`)
+        .forEach((element) => element.removeAttribute(EXTENSION_FLAG));
+
+    document.documentElement.classList.remove("ksb-modal-is-open");
+}
+
+function observePageChanges() {
+    if (!document.body || pageObserver) return;
+
+    pageObserver = new MutationObserver(() => {
+        if (isTeachTablePage()) {
+            schedulePageScan();
+        } else {
+            cleanupScheduleBuilderUi();
+        }
+    });
+
+    pageObserver.observe(document.body, {
         childList: true,
         subtree: true,
     });
 }
 
 function injectExtensionUi() {
+    if (!isTeachTablePage()) return;
+
     ensureModalShell();
     ensureSidebarLauncher();
     updateScheduleBuilderVisibility();
 }
 
 function ensureModalShell() {
+    if (!isTeachTablePage()) return;
+
     if (document.querySelector("#kmitl-schedule-builder-panel")) {
         return;
     }
@@ -239,18 +370,14 @@ function ensureModalShell() {
         await removeSelectedSubject(removeButton.dataset.ksbRemoveSubjectId);
     });
 
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && isScheduleBuilderExpanded()) {
-            closeScheduleBuilderModal();
-        }
-    });
-    window.addEventListener("resize", updateModalSidebarOffset);
-    window.addEventListener("resize", updateSidebarLauncherPosition);
+    addScheduleBuilderGlobalListeners();
 
     updateScheduleBuilderVisibility();
 }
 
 function updateScheduleBuilderVisibility() {
+    if (!isTeachTablePage()) return;
+
     updateModalSidebarOffset();
     updateSidebarLauncherPosition();
     updatePanelCollapsedState();
@@ -259,6 +386,8 @@ function updateScheduleBuilderVisibility() {
 }
 
 async function injectCheckboxesIntoSubjectCards() {
+    if (!isTeachTablePage()) return;
+
     if (checkboxInjectionInProgress) {
         checkboxInjectionPending = true;
         return;
@@ -269,6 +398,7 @@ async function injectCheckboxesIntoSubjectCards() {
     try {
         const cards = findSubjectCards();
         const selectedSubjects = await getSelectedSubjects();
+        if (!isTeachTablePage()) return;
 
         cards.forEach((card) => {
             if (card.hasAttribute(EXTENSION_FLAG)) return;
@@ -309,12 +439,15 @@ async function injectCheckboxesIntoSubjectCards() {
 }
 
 function schedulePageScan() {
+    if (!isTeachTablePage()) return;
     if (pageScanScheduled) return;
 
     pageScanScheduled = true;
 
-    window.setTimeout(() => {
+    pageScanTimer = window.setTimeout(() => {
+        pageScanTimer = null;
         pageScanScheduled = false;
+        if (!isTeachTablePage()) return;
         injectCheckboxesIntoSubjectCards();
         injectExtensionUi();
         updateSidebarLauncherPosition();
@@ -828,10 +961,14 @@ async function clearSelectedSubjects() {
 }
 
 async function renderTimetable() {
+    if (!isTeachTablePage()) return;
+
     await renderSelectedSubjectPanel();
 }
 
 function openScheduleBuilderModal() {
+    if (!isTeachTablePage()) return;
+
     try {
         ensureModalShell();
         isPanelCollapsed = false;
@@ -845,6 +982,8 @@ function openScheduleBuilderModal() {
 }
 
 function closeScheduleBuilderModal() {
+    if (!isTeachTablePage()) return;
+
     try {
         isPanelCollapsed = true;
         updatePanelCollapsedState();
@@ -853,6 +992,30 @@ function closeScheduleBuilderModal() {
     } catch (error) {
         console.error("[KSB] Failed to close schedule builder modal", error);
     }
+}
+
+function handleScheduleBuilderKeydown(event) {
+    if (event.key === "Escape" && isScheduleBuilderExpanded()) {
+        closeScheduleBuilderModal();
+    }
+}
+
+function addScheduleBuilderGlobalListeners() {
+    if (globalListenersAttached) return;
+
+    document.addEventListener("keydown", handleScheduleBuilderKeydown);
+    window.addEventListener("resize", updateModalSidebarOffset);
+    window.addEventListener("resize", updateSidebarLauncherPosition);
+    globalListenersAttached = true;
+}
+
+function removeScheduleBuilderGlobalListeners() {
+    if (!globalListenersAttached) return;
+
+    document.removeEventListener("keydown", handleScheduleBuilderKeydown);
+    window.removeEventListener("resize", updateModalSidebarOffset);
+    window.removeEventListener("resize", updateSidebarLauncherPosition);
+    globalListenersAttached = false;
 }
 
 function isScheduleBuilderExpanded() {
@@ -1034,6 +1197,8 @@ function updateSidebarLauncherPosition() {
 }
 
 function ensureSidebarLauncher() {
+    if (!isTeachTablePage()) return null;
+
     let launcher = document.querySelector("#kmitl-schedule-builder-launcher");
     if (!launcher) {
         launcher = createSidebarLauncher();
@@ -1110,6 +1275,8 @@ function bindSidebarLauncherButton(launcher) {
 }
 
 async function renderSelectedSubjectPanel() {
+    if (!isTeachTablePage()) return;
+
     const selectedSubjects = await getSelectedSubjects();
     latestSelectedSubjects = selectedSubjects;
 
