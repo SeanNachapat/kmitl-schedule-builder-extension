@@ -164,6 +164,7 @@ function ensureModalShell() {
             <button class="ksb-export-button" type="button" data-ksb-copy="classes" aria-label="Copy selected classes as plain text">Copy Classes</button>
             <button class="ksb-export-button" type="button" data-ksb-copy="timetable" aria-label="Copy timetable summary as plain text">Copy Timetable</button>
             <button class="ksb-export-button" type="button" data-ksb-copy="groups" aria-label="Copy subject groups as plain text">Copy Groups</button>
+            <button class="ksb-export-button" type="button" data-ksb-download="png" aria-label="Download timetable as PNG">Download PNG</button>
             <span id="ksb-copy-status" class="ksb-copy-status" aria-live="polite"></span>
         </div>
         <div id="ksb-timetable"></div>
@@ -201,6 +202,14 @@ function ensureModalShell() {
         const copyButton = event.target.closest("[data-ksb-copy]");
         if (copyButton instanceof HTMLElement) {
             await handleCopyAction(copyButton.dataset.ksbCopy);
+            return;
+        }
+
+        const downloadButton = event.target.closest("[data-ksb-download]");
+        if (downloadButton instanceof HTMLElement) {
+            if (downloadButton.dataset.ksbDownload === "png") {
+                await handleDownloadPngAction();
+            }
             return;
         }
 
@@ -1988,6 +1997,348 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+}
+
+async function handleDownloadPngAction() {
+    const selectedSubjects = latestSelectedSubjects;
+    if (selectedSubjects.length === 0) {
+        setCopyStatus("Nothing to download");
+        return;
+    }
+
+    try {
+        const canvas = buildTimetablePngCanvas(selectedSubjects);
+        const filename = getTimetablePngFilename();
+        downloadCanvasAsPng(canvas, filename);
+        setCopyStatus("PNG downloaded");
+    } catch (error) {
+        console.error("[KSB] Failed to download timetable PNG", error);
+        setCopyStatus("PNG download failed");
+    }
+}
+
+function getTimetablePngFilename() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    return `kmitl-schedule-builder-${year}${month}${day}-${hours}${minutes}.png`;
+}
+
+function downloadCanvasAsPng(canvas, filename) {
+    canvas.toBlob((blob) => {
+        if (!blob) throw new Error("Failed to create blob from canvas");
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, "image/png");
+}
+
+function getTimetableCanvasLayout(subjects) {
+    const scale = 2;
+    const margin = 32;
+    const titleHeight = 56;
+    const headerHeight = 36;
+    const dayLabelWidth = 72;
+    const slotWidth = 48;
+    const rowHeight = 92;
+
+    const slots = getCanvasTimeSlots();
+    const unplaceableSubjects = getUnplaceableSubjects(subjects);
+
+    const unplaceableHeightPerSubject = 24;
+    let unplaceableSectionHeight = 0;
+    if (unplaceableSubjects.length > 0) {
+        unplaceableSectionHeight = 40 + (unplaceableSubjects.length * unplaceableHeightPerSubject);
+    }
+
+    const logicalWidth = margin * 2 + dayLabelWidth + slots.length * slotWidth;
+    const logicalHeight = margin * 2 + titleHeight + headerHeight + TIMETABLE_DAYS.length * rowHeight + unplaceableSectionHeight;
+
+    return {
+        scale,
+        margin,
+        titleHeight,
+        headerHeight,
+        dayLabelWidth,
+        slotWidth,
+        rowHeight,
+        logicalWidth,
+        logicalHeight,
+        slots,
+        unplaceableSubjects
+    };
+}
+
+function getCanvasTimeSlots() {
+    const slots = [];
+    for (let minutes = TIMETABLE_START_MINUTE; minutes < TIMETABLE_END_MINUTE; minutes += TIMETABLE_SLOT_MINUTES) {
+        slots.push({
+            minutes,
+            label: minutes % 60 === 0 ? minutesToTimeLabel(minutes) : ""
+        });
+    }
+    return slots;
+}
+
+function buildTimetablePngCanvas(subjects) {
+    const layout = getTimetableCanvasLayout(subjects);
+    const canvas = document.createElement("canvas");
+    canvas.width = layout.logicalWidth * layout.scale;
+    canvas.height = layout.logicalHeight * layout.scale;
+
+    const ctx = canvas.getContext("2d");
+    ctx.scale(layout.scale, layout.scale);
+
+    drawTimetableBackground(ctx, layout);
+    drawTimetableHeaders(ctx, layout, subjects.length);
+    drawTimetableGridLines(ctx, layout);
+    
+    const conflicts = getSubjectConflicts(subjects);
+    const conflictingSubjectIds = getConflictingSubjectIds(conflicts);
+    drawTimetableBlocks(ctx, layout, subjects, conflictingSubjectIds);
+    
+    if (layout.unplaceableSubjects.length > 0) {
+        drawTimetableUnplaceable(ctx, layout);
+    }
+
+    return canvas;
+}
+
+function drawTimetableBackground(ctx, layout) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, layout.logicalWidth, layout.logicalHeight);
+}
+
+function drawTimetableHeaders(ctx, layout, selectedCount) {
+    ctx.fillStyle = "#f15a24";
+    ctx.font = "bold 20px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("KMITL Schedule Builder", layout.margin, layout.margin);
+
+    ctx.fillStyle = "#666666";
+    ctx.font = "14px Arial, sans-serif";
+    ctx.fillText(`Selected: ${selectedCount}`, layout.margin, layout.margin + 28);
+}
+
+function drawTimetableGridLines(ctx, layout) {
+    const startX = layout.margin + layout.dayLabelWidth;
+    const startY = layout.margin + layout.titleHeight;
+    const gridWidth = layout.slots.length * layout.slotWidth;
+    const gridHeight = TIMETABLE_DAYS.length * layout.rowHeight;
+
+    ctx.fillStyle = "#f0f0f0";
+    ctx.fillRect(layout.margin, startY, layout.dayLabelWidth + gridWidth, layout.headerHeight);
+
+    ctx.strokeStyle = "#dedede";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(layout.margin, startY, layout.dayLabelWidth + gridWidth, layout.headerHeight + gridHeight);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#c9471c";
+    ctx.font = "bold 12px Arial, sans-serif";
+    ctx.fillText("Day", layout.margin + layout.dayLabelWidth / 2, startY + layout.headerHeight / 2);
+
+    for (let i = 0; i < TIMETABLE_DAYS.length; i++) {
+        const day = TIMETABLE_DAYS[i];
+        const rowY = startY + layout.headerHeight + i * layout.rowHeight;
+        
+        ctx.fillStyle = i % 2 === 0 ? "#ffffff" : "#fafafa";
+        ctx.fillRect(startX, rowY, gridWidth, layout.rowHeight);
+        
+        ctx.fillStyle = "#f7f7f7";
+        ctx.fillRect(layout.margin, rowY, layout.dayLabelWidth, layout.rowHeight);
+
+        ctx.beginPath();
+        ctx.moveTo(layout.margin, rowY);
+        ctx.lineTo(layout.margin + layout.dayLabelWidth + gridWidth, rowY);
+        ctx.stroke();
+
+        ctx.fillStyle = "#c9471c";
+        ctx.font = "bold 12px Arial, sans-serif";
+        ctx.fillText(TIMETABLE_DAY_LABELS[day], layout.margin + layout.dayLabelWidth / 2, rowY + layout.rowHeight / 2);
+    }
+
+    for (let i = 0; i <= layout.slots.length; i++) {
+        const colX = startX + i * layout.slotWidth;
+        
+        ctx.beginPath();
+        ctx.moveTo(colX, startY);
+        ctx.lineTo(colX, startY + layout.headerHeight + gridHeight);
+        ctx.stroke();
+
+        if (i < layout.slots.length) {
+            const slot = layout.slots[i];
+            if (slot.label) {
+                ctx.fillStyle = "#444444";
+                ctx.font = "bold 11px Arial, sans-serif";
+                ctx.fillText(slot.label, colX + layout.slotWidth, startY + layout.headerHeight / 2);
+            }
+        }
+    }
+}
+
+function drawTimetableBlocks(ctx, layout, subjects, conflictingSubjectIds) {
+    const placeableSubjects = getPlaceableSubjects(subjects);
+
+    placeableSubjects.forEach(subject => {
+        const placement = getSubjectCanvasPlacement(subject, layout);
+        if (!placement) return;
+
+        const isConflict = isSubjectConflicting(subject, conflictingSubjectIds);
+        
+        const x = placement.x + 3;
+        const y = placement.y + 5;
+        const w = placement.width - 6;
+        const h = layout.rowHeight - 10;
+
+        ctx.fillStyle = isConflict ? "#fffbeb" : "#fff3ed";
+        ctx.fillRect(x, y, w, h);
+
+        ctx.strokeStyle = isConflict ? "#d97706" : "#f15a24";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.fillStyle = isConflict ? "#d97706" : "#f15a24";
+        ctx.fillRect(x, y, 4, h);
+
+        const textX = x + 10;
+        let textY = y + 8;
+        
+        ctx.fillStyle = "#333333";
+        ctx.font = "bold 11px Arial, sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        
+        const title = getSubjectDisplayName(subject);
+        textY = drawWrappedText(ctx, title, textX, textY, w - 16, 14, 2);
+        
+        textY += 4;
+        
+        ctx.fillStyle = "#666666";
+        ctx.font = "10px Arial, sans-serif";
+        
+        const typeAndSection = [
+            getSubjectDisplayClassType(subject),
+            subject.section ? `section(${subject.section})` : ""
+        ].filter(Boolean).join(" | ");
+        ctx.fillText(typeAndSection, textX, textY);
+        textY += 14;
+
+        const timeRange = `${getSubjectStartTime(subject)} - ${getSubjectEndTime(subject)}`;
+        ctx.fillText(timeRange, textX, textY);
+        textY += 14;
+
+        const location = getSubjectDisplayLocation(subject);
+        if (location) {
+            ctx.fillText(location, textX, textY);
+        }
+
+        if (isConflict) {
+            ctx.fillStyle = "#d97706";
+            ctx.font = "bold 10px Arial, sans-serif";
+            const tw = ctx.measureText("Conflict").width;
+            ctx.fillText("Conflict", x + w - tw - 6, y + h - 16);
+        }
+    });
+}
+
+function getSubjectCanvasPlacement(subject, layout) {
+    const gridPlacement = getSubjectGridPlacement(subject);
+    if (!gridPlacement.canPlace) return null;
+
+    const dayIndex = TIMETABLE_DAYS.indexOf(gridPlacement.day);
+    if (dayIndex === -1) return null;
+
+    const startX = layout.margin + layout.dayLabelWidth;
+    const startY = layout.margin + layout.titleHeight + layout.headerHeight;
+
+    const colIndex = gridPlacement.columnStart - TIMETABLE_FIRST_SLOT_COLUMN;
+    
+    return {
+        x: startX + colIndex * layout.slotWidth,
+        y: startY + dayIndex * layout.rowHeight,
+        width: gridPlacement.columnSpan * layout.slotWidth
+    };
+}
+
+function drawTimetableUnplaceable(ctx, layout) {
+    const startY = layout.margin + layout.titleHeight + layout.headerHeight + (TIMETABLE_DAYS.length * layout.rowHeight) + 24;
+    
+    ctx.fillStyle = "#c9471c";
+    ctx.font = "bold 12px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("Cannot place on timetable", layout.margin, startY);
+
+    ctx.fillStyle = "#333333";
+    let textY = startY + 20;
+    
+    layout.unplaceableSubjects.forEach(subject => {
+        const details = [
+            getSubjectDisplayDay(subject),
+            [getSubjectStartTime(subject), getSubjectEndTime(subject)].filter(Boolean).join(" - "),
+            subject.section ? `section(${subject.section})` : "",
+        ].filter(Boolean).join(" | ");
+
+        ctx.font = "bold 12px Arial, sans-serif";
+        ctx.fillText(getSubjectDisplayName(subject), layout.margin, textY);
+        
+        if (details) {
+            const titleWidth = ctx.measureText(getSubjectDisplayName(subject) + " ").width;
+            ctx.font = "12px Arial, sans-serif";
+            ctx.fillStyle = "#666666";
+            ctx.fillText(details, layout.margin + titleWidth, textY);
+            ctx.fillStyle = "#333333";
+        }
+        
+        textY += 24;
+    });
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+    const words = text.split(" ");
+    let line = "";
+    let lineCount = 0;
+    let currentY = y;
+
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + " ";
+        const metrics = ctx.measureText(testLine);
+        
+        if (metrics.width > maxWidth && n > 0) {
+            lineCount++;
+            if (lineCount >= maxLines) {
+                const ellipsisWidth = ctx.measureText("...").width;
+                while (ctx.measureText(line).width + ellipsisWidth > maxWidth && line.length > 0) {
+                    line = line.slice(0, -1);
+                }
+                ctx.fillText(line.trim() + "...", x, currentY);
+                return currentY + lineHeight;
+            }
+            ctx.fillText(line, x, currentY);
+            line = words[n] + " ";
+            currentY += lineHeight;
+        } else {
+            line = testLine;
+        }
+    }
+    
+    if (lineCount < maxLines) {
+        ctx.fillText(line, x, currentY);
+        currentY += lineHeight;
+    }
+
+    return currentY;
 }
 
 init();
