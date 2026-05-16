@@ -149,6 +149,7 @@ function cleanupScheduleBuilderUi() {
     }
 
     removeScheduleBuilderGlobalListeners();
+    updateVisibleSubjectIssueMarkers(new Set(), new Set());
     document.querySelector("#kmitl-schedule-builder-launcher")?.remove();
     document.querySelector("#kmitl-schedule-builder-modal-overlay")?.remove();
     document.querySelector(`#${KSB_EXTENSION_STYLE_ID}`)?.remove();
@@ -213,7 +214,7 @@ function ensureModalShell() {
         <div class="ksb-panel-title">
             <strong>
                 ${ksbRenderIcon("calendar")} KMITL Schedule Builder
-                <span class="ksb-attribution">v0.3.0 — Enhanced</span>
+                <span class="ksb-attribution">v0.3.1</span>
             </strong>
             <div id="ksb-header-credits"></div>
             <span id="ksb-selected-count-compact" class="ksb-selected-count-compact">${ksbRenderIcon("selected")} Selected: 0</span>
@@ -421,10 +422,15 @@ async function injectCheckboxesIntoSubjectCards() {
             });
 
             checkboxWrapper.appendChild(checkbox);
-            checkboxWrapper.appendChild(document.createTextNode(" Add"));
+            const checkboxLabel = document.createElement("span");
+            checkboxLabel.className = "ksb-checkbox-label";
+            checkboxLabel.textContent = "Add";
+            checkboxWrapper.appendChild(checkboxLabel);
 
             getCheckboxInjectionTarget(card).prepend(checkboxWrapper);
         });
+
+        updateVisibleSubjectIssueMarkersForSubjects(selectedSubjects);
     } finally {
         checkboxInjectionInProgress = false;
 
@@ -1313,6 +1319,7 @@ async function renderSelectedSubjectPanel() {
     updateSectionToggleButtons();
 
     if (selectedSubjects.length === 0) {
+        updateVisibleSubjectIssueMarkers(new Set(), new Set());
         timetableElement.innerHTML = renderSelectedSubjectList(selectedSubjects);
         return;
     }
@@ -1332,6 +1339,7 @@ async function renderSelectedSubjectPanel() {
 
     const duplicateSubjectIds = new Set();
     duplicateSelections.forEach(group => group.subjects.forEach(s => duplicateSubjectIds.add(s.id)));
+    updateVisibleSubjectIssueMarkers(conflictingSubjectIds, duplicateSubjectIds);
 
     // Update modal error badge
     const modalErrorContainer = document.querySelector("#ksb-modal-error-badge");
@@ -2177,6 +2185,122 @@ function syncAllVisibleCheckboxes(selectedSubjects) {
     document.querySelectorAll(".ksb-subject-checkbox").forEach((checkbox) => {
         checkbox.checked = isSubjectSelected(checkbox.dataset.subjectId, selectedSubjects);
     });
+}
+
+function updateVisibleSubjectIssueMarkersForSubjects(selectedSubjects) {
+    const conflicts = getSubjectConflicts(selectedSubjects);
+    const duplicateSelections = getDuplicateSubjectSelections(selectedSubjects);
+    const conflictingSubjectIds = getConflictingSubjectIds(conflicts);
+    const duplicateSubjectIds = new Set();
+
+    duplicateSelections.forEach((group) => {
+        group.subjects.forEach((subject) => {
+            if (subject.id) duplicateSubjectIds.add(subject.id);
+        });
+    });
+
+    updateVisibleSubjectIssueMarkers(conflictingSubjectIds, duplicateSubjectIds);
+}
+
+function updateVisibleSubjectIssueMarkers(conflictingSubjectIds, duplicateSubjectIds) {
+    document.querySelectorAll(".ksb-subject-checkbox").forEach((checkbox) => {
+        const subjectId = checkbox.dataset.subjectId || "";
+        const wrapper = checkbox.closest(KSB_CHECKBOX_WRAPPER_SELECTOR);
+        const sourceElement = checkbox.closest(`[${KSB_EXTENSION_FLAG}]`);
+        if (!(wrapper instanceof HTMLElement) || !(sourceElement instanceof HTMLElement)) return;
+
+        clearSubjectIssueMarker(wrapper, sourceElement);
+
+        const isConflict = conflictingSubjectIds.has(subjectId);
+        const isDuplicate = duplicateSubjectIds.has(subjectId);
+        if (!isConflict && !isDuplicate) return;
+
+        const issueTitle = isConflict
+            ? "This selected class overlaps another selected class."
+            : "This selected class duplicates another selected section for the same course.";
+
+        wrapper.classList.add("ksb-checkbox-wrapper--issue");
+        sourceElement.classList.add("ksb-subject-source--issue");
+
+        if (isConflict) {
+            wrapper.classList.add("ksb-checkbox-wrapper--conflict");
+            sourceElement.classList.add("ksb-subject-source--conflict");
+        }
+
+        if (isDuplicate) {
+            wrapper.classList.add("ksb-checkbox-wrapper--duplicate");
+            sourceElement.classList.add("ksb-subject-source--duplicate");
+        }
+
+        if (!sourceElement.dataset.ksbOriginalTitle) {
+            sourceElement.dataset.ksbOriginalTitle = sourceElement.getAttribute("title") || "";
+        }
+        sourceElement.setAttribute("title", issueTitle);
+
+        updateCheckboxIssueLabel(wrapper, "Add");
+        updateCheckboxIssueBadge(wrapper, isConflict ? "Conflict" : "Duplicate", issueTitle);
+    });
+}
+
+function clearSubjectIssueMarker(wrapper, sourceElement) {
+    wrapper.classList.remove(
+        "ksb-checkbox-wrapper--issue",
+        "ksb-checkbox-wrapper--conflict",
+        "ksb-checkbox-wrapper--duplicate"
+    );
+    sourceElement.classList.remove(
+        "ksb-subject-source--issue",
+        "ksb-subject-source--conflict",
+        "ksb-subject-source--duplicate"
+    );
+
+    updateCheckboxIssueLabel(wrapper, "Add");
+    wrapper.querySelectorAll(".ksb-checkbox-issue-badge").forEach((badge) => badge.remove());
+
+    const previousBadge = wrapper.previousElementSibling;
+    if (previousBadge?.classList.contains("ksb-checkbox-issue-badge")) {
+        previousBadge.remove();
+    }
+
+    if (sourceElement.dataset.ksbOriginalTitle !== undefined) {
+        const originalTitle = sourceElement.dataset.ksbOriginalTitle;
+        if (originalTitle) {
+            sourceElement.setAttribute("title", originalTitle);
+        } else {
+            sourceElement.removeAttribute("title");
+        }
+        delete sourceElement.dataset.ksbOriginalTitle;
+    }
+}
+
+function updateCheckboxIssueLabel(wrapper, label) {
+    let labelElement = wrapper.querySelector(".ksb-checkbox-label");
+
+    if (!labelElement) {
+        labelElement = document.createElement("span");
+        labelElement.className = "ksb-checkbox-label";
+        labelElement.textContent = "Add";
+        wrapper.appendChild(labelElement);
+    }
+
+    labelElement.textContent = label;
+}
+
+function updateCheckboxIssueBadge(wrapper, label, title) {
+    let badge = wrapper.previousElementSibling;
+    if (!badge?.classList.contains("ksb-checkbox-issue-badge")) {
+        badge = null;
+    }
+
+    if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "ksb-checkbox-issue-badge";
+        wrapper.insertAdjacentElement("beforebegin", badge);
+    }
+
+    badge.innerHTML = `${ksbRenderIcon("warning")} <span>${ksbEscapeHtml(label)}</span>`;
+    badge.setAttribute("title", title);
+    badge.setAttribute("aria-label", title);
 }
 
 function getSubjectCardMetaParts(subject) {

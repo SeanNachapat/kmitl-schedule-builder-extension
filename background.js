@@ -1,6 +1,6 @@
 // Background service worker for KMITL Schedule Builder
 chrome.runtime.onInstalled.addListener(() => {
-    console.log('KMITL Schedule Builder v0.3.0 installed');
+    console.log('KMITL Schedule Builder v0.3.1 installed');
 });
 
 // Listener for messages from popup or content scripts if needed

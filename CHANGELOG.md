@@ -1,3 +1,6 @@
+## 0.3.1
+- Mark selected classes that cause conflicts or duplicate-section warnings directly in the KMITL teaching table
+
 ## 0.3.0
 - Add real-time conflict and duplicate error badges to the launcher and modal header
 - Stabilize UI rendering to prevent input focus loss during state updates

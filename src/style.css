@@ -879,6 +879,57 @@
     z-index: auto;
 }
 
+.ksb-checkbox-wrapper--issue {
+    border-width: 2px;
+    font-weight: 700;
+}
+
+.ksb-checkbox-wrapper--conflict,
+.ksb-checkbox-wrapper--duplicate {
+    border-color: var(--ksb-conflict);
+    background: var(--ksb-conflict-bg);
+    color: #b91c1c;
+}
+
+.ksb-checkbox-issue-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: fit-content;
+    min-width: 0;
+    margin: 4px auto 0;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.25);
+    line-height: 1;
+}
+
+.ksb-checkbox-issue-badge .ksb-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.ksb-subject-source--conflict > td,
+.ksb-subject-source--duplicate > td {
+    background: #fef2f2 !important;
+}
+
+.ksb-subject-source--conflict > td:first-child,
+.ksb-subject-source--duplicate > td:first-child {
+    box-shadow: inset 4px 0 0 var(--ksb-conflict);
+}
+
+.ksb-subject-source--conflict:not(tr),
+.ksb-subject-source--duplicate:not(tr) {
+    border-left: 4px solid var(--ksb-conflict) !important;
+    background: #fef2f2 !important;
+}
+
 /* ───────────── New Features Styles ───────────── */
 
 .ksb-credit-counter {

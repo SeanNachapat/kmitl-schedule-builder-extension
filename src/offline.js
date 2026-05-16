@@ -18,7 +18,7 @@ async function ksbSaveOfflineCache(subjects) {
     const cache = {
         subjects: subjects,
         timestamp: new Date().toISOString(),
-        version: "0.3.0",
+        version: "0.3.1",
     };
     ksbOfflineCache = cache;
     await ksbStorageSet(KSB_OFFLINE_CACHE_KEY, cache);
